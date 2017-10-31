@@ -1,0 +1,12 @@
+{
+	"name": "YUM_Browser_Show",
+	"version": "0.0.1",
+	"dependencies": {
+		"cheerio": "^1.0.0-rc.2",
+		"decompress": "^4.2.0",
+		"ejs": "^2.5.7",
+		"express": "^4.16.2",
+		"extract-zip": "^1.6.5",
+		"xml2js": "^0.4.19"
+	}
+}
