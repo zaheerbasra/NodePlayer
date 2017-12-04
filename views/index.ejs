@@ -1,7 +1,7 @@
 <!DOCTYPE html> 
 <html> 
 <head>
-<style type="text/css">
+	<style type="text/css">
 	video, object {
 		width: 100%;
 		height:100%;
@@ -22,7 +22,63 @@
 </style>
 </head>
 <body class="ext-webkit ext-chrome"> 
-<%- htmlOut %>
+	<script>
+		function RegionPlayer(regionName) {
+			var currentRegion = regionName;
+			var regionDiv = document.getElementById( currentRegion );
+			var playlist = document.getElementById( currentRegion + '-playlist' );
+			var listItems = playlist.children;
+			var currentItem = listItems.length-1;
+
+			function playContent( index ) {
+				console.log('Started playContent for '+currentRegion+' index '+index);
+				listItems[index].classList.add( 'current' );
+				var jsonItem = JSON.parse(listItems[index].innerHTML);
+				switch (jsonItem.type.toLowerCase()) {
+					case 'image':
+					regionDiv.innerHTML = '<img src="' + jsonItem.source + '" width="100%" height="100%"></img>'
+					break;
+					case 'video':
+					case 'movie':
+					regionDiv.innerHTML = '<video id="' + currentRegion + '-video" width="100%" height="100%" autoplay'+ (listItems.length == 1 ? ' loop':'') +'><source src="' + jsonItem.source + '" type="video/mp4"></video>';
+					break;
+					case 'html':
+					regionDiv.innerHTML = '<iframe scrolling="no" src="' + jsonItem.source +'" style="border:none;" width="100%" height="100%"></iframe>'
+					break;
+					default:
+					regionDiv.innerHTML = 'Unrecognised content type: ' + jsonItem.type + ':' + jsonItem.source;
+				}
+				if (listItems.length > 1) {
+					if (jsonItem.duration > 0) {
+						window.setTimeout(nextContentEvent, jsonItem.duration * 1000);
+					} else {
+						if (jsonItem.type === 'video' || jsonItem.type === 'movie') {
+							document.getElementById(currentRegion + '-video').addEventListener( 'ended', nextContentEvent);
+						} else {
+							window.setTimeout(nextContentEvent, 10000);
+						}
+					}
+					currentItem = index;
+				}
+				regionDiv.classList.remove('hide');
+			}
+
+			function nextContentEvent() {
+				listItems[currentItem].classList.remove( 'current' );
+				nextItem = currentItem + 1;
+				if ( nextItem >= listItems.length ) {
+					nextItem = 0;
+				}
+				if (document.getElementById(currentRegion + '-video')) {
+					document.getElementById(currentRegion + '-video').removeEventListener('ended', nextContentEvent);
+				}
+				regionDiv.classList.add('hide');
+				window.setTimeout(playContent, 500, nextItem);
+			} 
+			window.setTimeout(nextContentEvent, 1000);
+		}
+	</script>
+	<%- htmlOut %>
 </body> 
 </html>
 

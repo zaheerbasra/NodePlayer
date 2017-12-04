@@ -6,7 +6,7 @@
 		"decompress": "^4.2.0",
 		"ejs": "^2.5.7",
 		"express": "^4.16.2",
-		"extract-zip": "^1.6.5",
+		"extract-zip": "^1.6.6",
 		"xml2js": "^0.4.19"
 	}
 }
