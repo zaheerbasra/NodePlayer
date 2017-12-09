@@ -2,17 +2,20 @@
 /*
 Debug setup
 */
-const BASIC_DEBUG = 1;
-const DATA_DEBUG = 2;
-const FOCUS_DEBUG = 4;
-const ERROR_DEBUG = 8;
-const WATCHER_DEBUG = 16;
-const WEBSOCK_DEBUG = 32;
+const ALL_DEBUG = 1;
+const BASIC_DEBUG = 2;
+const DATA_DEBUG = 4;
+const FOCUS_DEBUG = 8;
+const ERROR_DEBUG = 16;
+const WATCHER_DEBUG = 32;
+const WEBSOCK_DEBUG = 64;
+const ZIP_DEBUG = 128;
+const PRICE_DEBUG = 256;
 
-var debug = BASIC_DEBUG | WEBSOCK_DEBUG;
+var debug = ALL_DEBUG | BASIC_DEBUG | WEBSOCK_DEBUG | ZIP_DEBUG | FOCUS_DEBUG;
 
 function debugLog(flag, msg) {
-	if (debug & flag || flag & ERROR_DEBUG) {
+	if (debug & flag || flag & ERROR_DEBUG || debug & ALL_DEBUG) {
 		console.log(msg);
 	}
 }
@@ -27,6 +30,8 @@ var ejs = require('ejs');
 var server = require('http').createServer();
 var unzip = require('decompress');
 app.set('view engine', 'ejs');
+var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
+
 
 /*
 Directory watching and remote restarting
@@ -67,6 +72,16 @@ watch.watchTree(__dirname, function (f, curr, prev) {
 
 
 /*
+Watcher setup for fs.existsSync checking
+*/
+
+function timedFSCheck(callback) {
+	debugLog(FOCUS_DEBUG, 'Retrying render');
+	callback();
+}
+
+
+/*
 Implementation
 */
 
@@ -104,11 +119,11 @@ function getPriceFile() {
 			priceFile = result.specials;
 		}
 	});
-	debugLog(FOCUS_DEBUG, 'Total of ' + Object.keys(priceFile).length + ' entries');
-	debugLog(FOCUS_DEBUG, 'Found items:');
+	debugLog(PRICE_DEBUG, 'Total of ' + Object.keys(priceFile).length + ' entries');
+	debugLog(PRICE_DEBUG, 'Found items:');
 	for (item in priceFile.keys) {
 		priceFile[item] = priceFile[item][0].trim();
-		debugLog(FOCUS_DEBUG, '|-' + item + ':' + priceFile[item]);
+		debugLog(PRICE_DEBUG, '|-' + item + ':' + priceFile[item]);
 	}
 	return priceFile;
 }
@@ -137,20 +152,27 @@ app.all('/incoming/Media/:path*', function (req, res, next) {
 		res.send('File request: /incoming/Media/' + req.params.path + req.params[0]);
 		break;
 		case '.html':
-		debugLog(DATA_DEBUG, "Got HTML request: /Urchannel/incoming/Media/" + req.params.path + req.params[0]);
+		debugLog(DATA_DEBUG, "Got HTML request: " + rootpath + "../incoming/Media/" + req.params.path + req.params[0]);
 		debugLog(DATA_DEBUG, "Renaming index.html to ejs");
-		fs.rename(req.params.path + req.params[0], req.params.path + req.params[0].replace(/\..{0,4}$/i, '.ejs'), function(err) {
+		var htmlToEjs = req.params.path + req.params[0].replace(/\..{0,4}$/i, '.ejs');
+		fs.rename(rootpath + '../incoming/Media/' + req.params.path + req.params[0], rootpath + '../incoming/Media/'+htmlToEjs, function(err) {
 			if (err) {
 				if (err.code !== 'ENOENT') {
 					throw err;
 				}
 			}
 		});
-		res.render('/urchannel/incoming/Media/'+ req.params.path + req.params[0].replace(/\..{0,4}$/i, '.ejs'), getPriceFile()); 
+		if (fs.existsSync(rootpath + '../incoming/Media/' + htmlToEjs)) {
+			res.render(rootpath + '../incoming/Media/'+ htmlToEjs, getPriceFile());
+		} else {
+			debugLog(FOCUS_DEBUG, 'Unzip running slow, adding timer to retry render');
+			setTimeout(timedFSCheck, 10000, function () {res.render(rootpath + '../incoming/Media/'+ htmlToEjs, getPriceFile());});
+		}
+
 		break;
 		default:
 		var options = {
-			root: '/Urchannel/incoming/Media/',
+			root: rootpath + '../incoming/Media/',
 			headers: {
 				'x-timestamp': Date.now(),
 				'x-sent': true
@@ -174,10 +196,10 @@ app.all('/incoming/Media/:path*', function (req, res, next) {
 app.get('/', function (req, res) {
 	var showFileName;
 
-	//debugLog(priceFile);
+	debugLog(BASIC_DEBUG, 'Looking in ' + rootpath + '../SignalFiles');
 
 	// Find all the signal files, the _show[r0c0] one will be the one we want to load
-	fs.readdir('/urchannel/SignalFiles', function(err, files) {
+	fs.readdir(rootpath + '../SignalFiles', function(err, files) {
 		debugLog(DATA_DEBUG, 'Files: ' + files);
 		for (var x = 0; x < files.length; x++ ) {
 			if (files[x].search(/_show\[r0c0\]/) >= 0) {
@@ -188,7 +210,7 @@ app.get('/', function (req, res) {
 		}
 
 		// Load the specified show file, extracting the item info from the first (and hopefully only!) region that has a date range including today
-		fs.readFile('/Urchannel/incoming/ShowFiles/' + showFileName, 'utf-8', function (err, data) {
+		fs.readFile(rootpath + '../incoming/ShowFiles/' + showFileName, 'utf-8', function (err, data) {
 			var showFile = JSON.parse(data);
 			var regions = [];
 			var htmlOut = '';
@@ -249,15 +271,15 @@ app.get('/', function (req, res) {
 				for (var y = 0; y < regions[x].mediaInfo.length ; y++) {
 					var jsonData = {"source": "/incoming" + regions[x].mediaInfo[y].source, "type" : regions[x].mediaInfo[y].type, "Duration" : regions[x].mediaInfo[y].duration};
 					if (regions[x].mediaInfo[y].type === 'zip') {
-						debugLog(DATA_DEBUG, 'Extracting zip contents');
+						debugLog(ZIP_DEBUG, 'Extracting zip contents');
 						jsonData.source = jsonData.source.replace(/\..{0,4}$/i,'/index.html');
 						jsonData.type = 'html';
-						if (fs.existsSync('/Urchannel/incoming' + regions[x].mediaInfo[y].source.replace(/\..{0,4}$/i,''))) {
-							debugLog(DATA_DEBUG, 'Deleting current unzipped folder');
-							rmdirRecursively('/Urchannel/incoming' + regions[x].mediaInfo[y].source.replace(/\..{0,4}$/i,''));
-							debugLog(DATA_DEBUG, 'Complete');
+						if (fs.existsSync(rootpath + '../incoming' + regions[x].mediaInfo[y].source.replace(/\..{0,4}$/i,''))) {
+							debugLog(ZIP_DEBUG, 'Deleting current unzipped folder');
+							rmdirRecursively(rootpath + '../incoming' + regions[x].mediaInfo[y].source.replace(/\..{0,4}$/i,''));
+							debugLog(ZIP_DEBUG, 'Complete');
 						}
-						unzip('/Urchannel/incoming' + regions[x].mediaInfo[y].source, '/Urchannel/incoming/Media/', {
+						unzip(rootpath + '../incoming' + regions[x].mediaInfo[y].source, rootpath + '../incoming/Media/', {
 							map: file => {
 								file.path = file.path.replace(/\.html$/i,'.ejs');
 								return file;
@@ -270,7 +292,7 @@ app.get('/', function (req, res) {
 								indexPath = res[0].path;
 							}
 						}).catch(err => {
-							debugLog(BASIC_DEBUG, 'Error in unzip process: ' + err.stack);
+							debugLog(ERROR_DEBUG, 'Error in unzip process: ' + err.stack);
 						});
 					}
 					debugLog(DATA_DEBUG, 'Configured new jsonData: ' + JSON.stringify(jsonData));
@@ -331,7 +353,7 @@ app.get('/', function (req, res) {
 });
 // Get this party started
 //app.listen(3000, function () {
-server.on('request', app);
-server.listen(3000, function() {
-	debugLog(BASIC_DEBUG, 'Starting http server:  *:3000');
-})
+	server.on('request', app);
+	server.listen(3000, function() {
+		debugLog(BASIC_DEBUG, 'Starting http server:  *:3000');
+	})
