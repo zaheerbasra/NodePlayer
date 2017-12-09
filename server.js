@@ -9,7 +9,7 @@ const ERROR_DEBUG = 8;
 const WATCHER_DEBUG = 16;
 const WEBSOCK_DEBUG = 32;
 
-var debug = BASIC_DEBUG | WEBSOCK_DEBUG | FOCUS_DEBUG;
+var debug = BASIC_DEBUG | WEBSOCK_DEBUG;
 
 function debugLog(flag, msg) {
 	if (debug & flag || flag & ERROR_DEBUG) {
@@ -60,7 +60,7 @@ watch.watchTree('/btv/incoming/PriceFiles', function (f, curr, prev) {
 	debugLog(WEBSOCK_DEBUG, 'Found change in price file, triggering reload');
 	wss.broadcast('reload');
 });
-watch.watchTree('/Urchannel/NodePlayer', function (f, curr, prev) {
+watch.watchTree(__dirname, function (f, curr, prev) {
 	debugLog(WEBSOCK_DEBUG, 'Found change in NodePlayer, triggering reload');
 	wss.broadcast('reload');
 });
@@ -92,20 +92,23 @@ function Watcher(watchVar, ChangeTest, Callback) {
 }
 
 // Get price files for use in playback.
-// Not actually used, content dept. producing HTML 5 pages that loads this themselves.
 function getPriceFile() {
+	// Hard coded location because this is where the price file is placed by other programs
 	var priceFile = fs.readFileSync('/btv/incoming/PriceFiles/price.xml', 'utf-8', function (err) {
 		if (err) debugLog(ERROR_DEBUG, err);
 	});
 	parseString(priceFile, function(err, result) {
 		if (err) { debugLog(ERROR_DEBUG, err); }
-		//debugLog(result);
-		priceFile = result.specials;
+		debugLog(DATA_DEBUG, result);
+		if (result.specials !== null) {
+			priceFile = result.specials;
+		}
 	});
-	//debugLog('Found items:');
-	for (item in priceFile) {
+	debugLog(FOCUS_DEBUG, 'Total of ' + Object.keys(priceFile).length + ' entries');
+	debugLog(FOCUS_DEBUG, 'Found items:');
+	for (item in priceFile.keys) {
 		priceFile[item] = priceFile[item][0].trim();
-		//debugLog('|-' + item + ':' + priceFile[item]);
+		debugLog(FOCUS_DEBUG, '|-' + item + ':' + priceFile[item]);
 	}
 	return priceFile;
 }
@@ -245,30 +248,32 @@ app.get('/', function (req, res) {
 				htmlOut = htmlOut + '<div id="'+regions[x].name+'-playlist" style="display:none;">\n'
 				for (var y = 0; y < regions[x].mediaInfo.length ; y++) {
 					var jsonData = {"source": "/incoming" + regions[x].mediaInfo[y].source, "type" : regions[x].mediaInfo[y].type, "Duration" : regions[x].mediaInfo[y].duration};
-					debugLog(DATA_DEBUG, 'Configured new jsonData: ' + JSON.stringify(jsonData));
 					if (regions[x].mediaInfo[y].type === 'zip') {
-						jsonData.source = jsonData.source.replace(/\..{0,4}$/i,'');
+						debugLog(DATA_DEBUG, 'Extracting zip contents');
+						jsonData.source = jsonData.source.replace(/\..{0,4}$/i,'/index.html');
+						jsonData.type = 'html';
 						if (fs.existsSync('/Urchannel/incoming' + regions[x].mediaInfo[y].source.replace(/\..{0,4}$/i,''))) {
 							debugLog(DATA_DEBUG, 'Deleting current unzipped folder');
 							rmdirRecursively('/Urchannel/incoming' + regions[x].mediaInfo[y].source.replace(/\..{0,4}$/i,''));
 							debugLog(DATA_DEBUG, 'Complete');
-							unzip('/Urchannel/incoming' + regions[x].mediaInfo[y].source, '/Urchannel/incoming/Media/', {
-								map: file => {
-									file.path = file.path.replace(/\.html$/i,'.ejs');
-									return file;
-								}
-							}).then(res => {
-								var indexPath = '';
-								if (res.path) {
-									indexPath = res.path;
-								} else if (res[0]) {
-									indexPath = res[0].path;
-								}
-							}).catch(err => {
-								debugLog(BASIC_DEBUG, 'Error in unzip process: ' + err.stack);
-							});
 						}
+						unzip('/Urchannel/incoming' + regions[x].mediaInfo[y].source, '/Urchannel/incoming/Media/', {
+							map: file => {
+								file.path = file.path.replace(/\.html$/i,'.ejs');
+								return file;
+							}
+						}).then(res => {
+							var indexPath = '';
+							if (res.path) {
+								indexPath = res.path;
+							} else if (res[0]) {
+								indexPath = res[0].path;
+							}
+						}).catch(err => {
+							debugLog(BASIC_DEBUG, 'Error in unzip process: ' + err.stack);
+						});
 					}
+					debugLog(DATA_DEBUG, 'Configured new jsonData: ' + JSON.stringify(jsonData));
 					/*switch (regions[x].mediaPath.slice(regions[x].mediaPath.lastIndexOf('.'))) {
 						case '.zip':
 						debugLog('Zip stuff: ' + regions[x].mediaPath);
