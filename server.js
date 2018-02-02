@@ -61,10 +61,12 @@ watch.watchTree('/Urchannel/SignalFiles', function (f, curr, prev) {
 	debugLog(WEBSOCK_DEBUG, 'Found change in signal files, triggering reload');
 	wss.broadcast('reload');
 });
-watch.watchTree('/btv/incoming/PriceFiles', function (f, curr, prev) {
-	debugLog(WEBSOCK_DEBUG, 'Found change in price file, triggering reload');
-	wss.broadcast('reload');
-});
+if (fs.existsSync('/btv/incoming/PriceFiles/price.xml')) {
+	watch.watchTree('/btv/incoming/PriceFiles', function (f, curr, prev) {
+		debugLog(WEBSOCK_DEBUG, 'Found change in price file, triggering reload');
+		wss.broadcast('reload');
+	});
+}
 watch.watchTree(__dirname, function (f, curr, prev) {
 	debugLog(WEBSOCK_DEBUG, 'Found change in NodePlayer, triggering reload');
 	wss.broadcast('reload');
@@ -109,21 +111,28 @@ function Watcher(watchVar, ChangeTest, Callback) {
 // Get price files for use in playback.
 function getPriceFile() {
 	// Hard coded location because this is where the price file is placed by other programs
-	var priceFile = fs.readFileSync('/btv/incoming/PriceFiles/price.xml', 'utf-8', function (err) {
-		if (err) debugLog(ERROR_DEBUG, err);
-	});
-	parseString(priceFile, function(err, result) {
-		if (err) { debugLog(ERROR_DEBUG, err); }
-		debugLog(DATA_DEBUG, result);
-		if (result.specials !== null) {
-			priceFile = result.specials;
+	var priceFile = null;
+	if (fs.existsSync('/btv/incoming/PriceFiles/price.xml')) {
+		priceFile = fs.readFileSync('/btv/incoming/PriceFiles/price.xml', 'utf-8', function (err) {
+			if (err) debugLog(ERROR_DEBUG, err);
+		});
+	} else {
+		debugLog(BASIC_DEBUG, 'No price file present, returning null')
+	}
+	if (priceFile !== null) {
+		parseString(priceFile, function(err, result) {
+			if (err) { debugLog(ERROR_DEBUG, err); }
+			debugLog(DATA_DEBUG, result);
+			if (result.specials !== null) {
+				priceFile = result.specials;
+			}
+		});
+		debugLog(PRICE_DEBUG, 'Total of ' + Object.keys(priceFile).length + ' entries');
+		debugLog(PRICE_DEBUG, 'Found items:');
+		for (item in priceFile.keys) {
+			priceFile[item] = priceFile[item][0].trim();
+			debugLog(PRICE_DEBUG, '|-' + item + ':' + priceFile[item]);
 		}
-	});
-	debugLog(PRICE_DEBUG, 'Total of ' + Object.keys(priceFile).length + ' entries');
-	debugLog(PRICE_DEBUG, 'Found items:');
-	for (item in priceFile.keys) {
-		priceFile[item] = priceFile[item][0].trim();
-		debugLog(PRICE_DEBUG, '|-' + item + ':' + priceFile[item]);
 	}
 	return priceFile;
 }
@@ -166,7 +175,12 @@ app.all('/incoming/Media/:path*', function (req, res, next) {
 			res.render(rootpath + '../incoming/Media/'+ htmlToEjs, getPriceFile());
 		} else {
 			debugLog(FOCUS_DEBUG, 'Unzip running slow, adding timer to retry render');
-			setTimeout(timedFSCheck, 10000, function () {res.render(rootpath + '../incoming/Media/'+ htmlToEjs, getPriceFile());});
+			var contentTimer = setInterval(function () {
+				if (fs.existsSync(rootpath + '../incoming/Media/' + htmlToEjs)) {
+					res.render(rootpath + '../incoming/Media/'+ htmlToEjs, getPriceFile());
+					clearInterval(contentTimer);
+				}
+			}, 1000);
 		}
 
 		break;
