@@ -20,7 +20,11 @@
 		overflow-y: hidden;
 	}
 	.hide {
-		transition: opacity 0.5s linear;
+		transition: opacity 0.5s ease-in-out;
+		opacity: 0;
+	}
+	.show {
+		transition: opacity 1s ease-in-out;
 		opacity: 1;
 	}
 </style>
@@ -65,6 +69,7 @@
 					currentItem = index;
 				}
 				regionDiv.classList.remove('hide');
+				regionDiv.classList.add('show');
 			}
 
 			function nextContentEvent() {
@@ -76,6 +81,7 @@
 				if (document.getElementById(currentRegion + '-video')) {
 					document.getElementById(currentRegion + '-video').removeEventListener('ended', nextContentEvent);
 				}
+				regionDiv.classList.remove('show');
 				regionDiv.classList.add('hide');
 				window.setTimeout(playContent, 500, nextItem);
 			} 
