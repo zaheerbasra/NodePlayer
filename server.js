@@ -152,6 +152,30 @@ function rmdirRecursively(path) {
 	}
 };
 
+// Determines whether the first date is before or after the second, in terms of hh:mm:ss
+// Returns -1 for before, 1 for after, or 0 for exactly the same time of day (even if not the same date)
+function checkDate(check1, check2) {
+	if (check1.getHours() > check2.getHours()) {  // If the hours are greater, you know it comes after
+		return 1;
+	} else if (check1.getHours() < check2.getHours()) { // Likewise if they're less, then you know it comes before
+		return -1;
+	} else {
+		if (check1.getMinutes() > check2.getMinutes()) { // Same with minutes
+			return 1;
+		} else if (check1.getMinutes() < check2.getMinutes()) {
+			return -1;
+		} else {
+			if (check1.getSeconds() > check2.getSeconds()) {
+				return 1;
+			} else if (check1.getSeconds() < check2.getSeconds()) {
+				return -1;
+			} else {
+				return 0; // At this stage there's functionally no difference in the time of day, barring milliseconds, and we don't track that precisely.
+			}
+		}
+	}
+}
+
 // Content retrieval:  https://127.0.0.1/incoming/Media/<file name> returns the requested file, be it HTML or other.
 // TODO:  Spits out an error if the file doesn't exist, should look into catching that at some point.
 // Note:  Zip file downloads are not supported, as we should never be sending zips to the browser.  Just their contents.
@@ -226,6 +250,9 @@ app.get('/', function (req, res) {
 		// Load the specified show file, extracting the item info from the first (and hopefully only!) region that has a date range including today
 		fs.readFile(rootpath + '../incoming/ShowFiles/' + showFileName, 'utf-8', function (err, data) {
 			var showFile = JSON.parse(data);
+			var showStartDate = new Date(parseInt(showFile.StartTime.slice(6,-2)));
+			var showEndDate = new Date(parseInt(showFile.EndTime.slice(6,-2)));
+			debugLog(BASIC_DEBUG, 'Show times: ' + showStartDate.getTime() + ' - ' + showEndDate.getTime());
 			var regions = [];
 			var htmlOut = '';
 			//var completeRegions = new Watcher(0, function(val) {return val >= regions.length;}, function() {res.render('index', {htmlOut: htmlOut});});
@@ -237,10 +264,11 @@ app.get('/', function (req, res) {
 					debugLog(DATA_DEBUG, playlist.Name);
 					debugLog(DATA_DEBUG, 'date string:'+playlist.StartTime.slice(6,-2));
 					var today = new Date();
-					var startDate = new Date(parseInt(playlist.StartTime.slice(6,-2)));
-					var endDate = new Date(parseInt(playlist.EndTime.slice(6,-2)));
-					debugLog(BASIC_DEBUG, 'startDate [' + startDate + ']\ntoday['+today+']\nendDate ['+endDate+']');
-					if (today > startDate && today < endDate) {
+					var regionStartDate = new Date(parseInt(playlist.StartTime.slice(6,-2)));
+					var regionEndDate = new Date(parseInt(playlist.EndTime.slice(6,-2)));
+					debugLog(BASIC_DEBUG, 'startDate [' + regionStartDate + ']\ntoday ['+today+']\nendDate ['+regionEndDate+']');
+					if ((playlist.RecurrenceRule == null && today > regionStartDate && today < regionEndDate) ||
+						(playlist.RecurrenceRule != null && today > showStartDate && today < showEndDate && checkDate(today, regionStartDate) >= 0 && checkDate(today, regionEndDate) <= 0)) {
 						/*debugLog('File name = ' + playlist.Items[0].Source);
 						debugLog('mediaName = ' + playlist.Items[0].Name.replace(/[\&\s]/g,'').replace(/\..{0,4}$/i, ''));*/
 						regions.push({
