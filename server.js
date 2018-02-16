@@ -176,6 +176,11 @@ function checkDate(check1, check2) {
 	}
 }
 
+// Returns the absolute seconds difference between two dates, ignoring days
+function timeDiff(date1, date2) {
+	return Math.abs(((date1.getHours() * 60*60) + (date1.getMinutes() * 60) + date1.getSeconds()) - ((date2.getHours() * 60*60) + (date2.getMinutes() * 60) + date2.getSeconds()));
+}
+
 // Content retrieval:  https://127.0.0.1/incoming/Media/<file name> returns the requested file, be it HTML or other.
 // TODO:  Spits out an error if the file doesn't exist, should look into catching that at some point.
 // Note:  Zip file downloads are not supported, as we should never be sending zips to the browser.  Just their contents.
@@ -257,6 +262,7 @@ app.get('/', function (req, res) {
 			var htmlOut = '';
 			//var completeRegions = new Watcher(0, function(val) {return val >= regions.length;}, function() {res.render('index', {htmlOut: htmlOut});});
 			var itemCount = 0;
+			var countdownTime = -1;
 			for (var region of showFile.Regions) {
 				debugLog(BASIC_DEBUG, 'Region: ' + region.Name);
 				// Iterate over the region entries looking for the current playlist
@@ -266,11 +272,23 @@ app.get('/', function (req, res) {
 					var today = new Date();
 					var regionStartDate = new Date(parseInt(playlist.StartTime.slice(6,-2)));
 					var regionEndDate = new Date(parseInt(playlist.EndTime.slice(6,-2)));
+					if (regionEndDate.getSeconds() == 0) {
+						regionEndDate.setSeconds(59);
+					}
 					debugLog(BASIC_DEBUG, 'startDate [' + regionStartDate + ']\ntoday ['+today+']\nendDate ['+regionEndDate+']');
 					if ((playlist.RecurrenceRule == null && today > regionStartDate && today < regionEndDate) ||
 						(playlist.RecurrenceRule != null && today > showStartDate && today < showEndDate && checkDate(today, regionStartDate) >= 0 && checkDate(today, regionEndDate) <= 0)) {
 						/*debugLog('File name = ' + playlist.Items[0].Source);
 						debugLog('mediaName = ' + playlist.Items[0].Name.replace(/[\&\s]/g,'').replace(/\..{0,4}$/i, ''));*/
+						if (playlist.RecurrenceRule != null) {
+							if (countdownTime < 0) {
+								countdownTime = (timeDiff(today, regionEndDate) + 1) * 1000;
+							} else {
+								var newTime = (timeDiff(today, regionEndDate) + 1) * 1000;
+								countdownTime = (countdownTime > newTime ? newTime : countdownTime);
+							}
+							debugLog(BASIC_DEBUG, 'RecurrenceRule not null, setting countdownTime to ' + countdownTime);
+						}
 						regions.push({
 							"x": (region.CanvasLeft / 1280) * 100,
 							"y": (region.CanvasTop / 720) * 100,
@@ -300,6 +318,13 @@ app.get('/', function (req, res) {
 				itemCount++;
 			}
 			debugLog(BASIC_DEBUG, 'Found ' + itemCount + ' items to play');
+			if (countdownTime > 0) {
+				debugLog(BASIC_DEBUG, "A region has dayparting, setting timer to refresh page for " + countdownTime + "ms from now.");
+				setTimeout(function () {
+					debugLog(WEBSOCK_DEBUG, 'Dayparting timer expired, sending reload...');
+					wss.broadcast('reload');
+				}, countdownTime);
+			}
 			var completeRegions = new Watcher(0, function(val) {return val >= itemCount;}, function() {res.render('index', {htmlOut: htmlOut});});
 			var renames = [];
 
