@@ -4,15 +4,16 @@ Debug setup
 */
 const ALL_DEBUG = 1;
 const BASIC_DEBUG = 2;
-const DATA_DEBUG = 4;
-const FOCUS_DEBUG = 8;
-const ERROR_DEBUG = 16;
-const WATCHER_DEBUG = 32;
-const WEBSOCK_DEBUG = 64;
-const ZIP_DEBUG = 128;
-const PRICE_DEBUG = 256;
+const DATA_DEBUG = 4;		// Deeper data messaging
+const FOCUS_DEBUG = 8;		// Focus on something new
+const ERROR_DEBUG = 16; 
+const WATCHER_DEBUG = 32;	// Debug messages related to watching certain variable values, like counting up regions and loading them
+const WEBSOCK_DEBUG = 64;	// Triggers when messages are sent or received via websock
+const ZIP_DEBUG = 128;		// Messages related to unzipping files
+const PRICE_DEBUG = 256;	// Anything pricing related
+const TIME_DEBUG = 512;		// Related to adjusting timezones for modifying the date/time to match EST
 
-var debug = ALL_DEBUG | BASIC_DEBUG | WEBSOCK_DEBUG | ZIP_DEBUG | FOCUS_DEBUG;
+var debug = BASIC_DEBUG | WEBSOCK_DEBUG | DATA_DEBUG;
 
 function debugLog(flag, msg) {
 	if (debug & flag || flag & ERROR_DEBUG || debug & ALL_DEBUG) {
@@ -122,7 +123,7 @@ function getPriceFile() {
 	if (priceFile !== null) {
 		parseString(priceFile, function(err, result) {
 			if (err) { debugLog(ERROR_DEBUG, err); }
-			debugLog(DATA_DEBUG, result);
+			debugLog(PRICE_DEBUG, result);
 			if (result.specials !== null) {
 				priceFile = result.specials;
 			}
@@ -154,8 +155,9 @@ function rmdirRecursively(path) {
 
 // Determines whether the first date is before or after the second, in terms of hh:mm:ss
 // Returns -1 for before, 1 for after, or 0 for exactly the same time of day (even if not the same date)
+// Modified to include an hour offset to correct to EST, because Aziz magic
 function checkDate(check1, check2) {
-	if (check1.getHours() > check2.getHours()) {  // If the hours are greater, you know it comes after
+	if (check1.getHours() + getHourOffset() > check2.getHours() + getHourOffset()) {  // If the hours are greater, you know it comes after
 		return 1;
 	} else if (check1.getHours() < check2.getHours()) { // Likewise if they're less, then you know it comes before
 		return -1;
@@ -174,6 +176,28 @@ function checkDate(check1, check2) {
 			}
 		}
 	}
+}
+
+// Returns the hourly offset based on the timezone, the difference we need to add to make a time correct for our system
+// Remember, getTimezoneOffset() returns minutes, not actual hours.
+function getHourOffset() {
+	var tzOffset =  new Date().getTimezoneOffset() / 60;
+	debugLog(TIME_DEBUG, "Timezone Offset: " + tzOffset);
+	if (tzOffset > 5) {
+		debugLog(TIME_DEBUG, "Returning " + (tzOffset - 5));
+		return tzOffset - 5;
+	} else {
+		debugLog(TIME_DEBUG, "Returning " + (tzOffset + 5));
+		return tzOffset + 5;
+	}
+}
+
+// Adjusts a date to be in line with EST
+function adjustHours(inDate) {
+	var newDate = inDate;
+	debugLog(TIME_DEBUG, "Adjusting time by " + getHourOffset());
+	newDate.setTime(newDate.getTime() + (getHourOffset() * 60 * 60 * 1000));
+	return newDate;
 }
 
 // Returns the absolute seconds difference between two dates, ignoring days
@@ -256,7 +280,9 @@ app.get('/', function (req, res) {
 		fs.readFile(rootpath + '../incoming/ShowFiles/' + showFileName, 'utf-8', function (err, data) {
 			var showFile = JSON.parse(data);
 			var showStartDate = new Date(parseInt(showFile.StartTime.slice(6,-2)));
+			showStartDate = adjustHours(showStartDate);
 			var showEndDate = new Date(parseInt(showFile.EndTime.slice(6,-2)));
+			showEndDate = adjustHours(showEndDate);
 			debugLog(BASIC_DEBUG, 'Show times: ' + showStartDate.getTime() + ' - ' + showEndDate.getTime());
 			var regions = [];
 			var htmlOut = '';
@@ -270,8 +296,11 @@ app.get('/', function (req, res) {
 					debugLog(DATA_DEBUG, playlist.Name);
 					debugLog(DATA_DEBUG, 'date string:'+playlist.StartTime.slice(6,-2));
 					var today = new Date();
+					today = adjustHours(today);
 					var regionStartDate = new Date(parseInt(playlist.StartTime.slice(6,-2)));
+					regionStartDate = adjustHours(regionStartDate);
 					var regionEndDate = new Date(parseInt(playlist.EndTime.slice(6,-2)));
+					regionEndDate = adjustHours(regionEndDate);
 					if (regionEndDate.getSeconds() == 0) {
 						regionEndDate.setSeconds(59);
 					}
@@ -289,6 +318,8 @@ app.get('/', function (req, res) {
 							}
 							debugLog(BASIC_DEBUG, 'RecurrenceRule not null, setting countdownTime to ' + countdownTime);
 						}
+						if (region.Width == 1279)
+							region.Width = 1280;
 						regions.push({
 							"x": (region.CanvasLeft / 1280) * 100,
 							"y": (region.CanvasTop / 720) * 100,
@@ -300,17 +331,6 @@ app.get('/', function (req, res) {
 						});
 						// Push a bunch of items onto the stack for this region for future playback
 						for (var item of playlist.Items) {
-							/*var itemType = item.AssetType;
-							switch (itemType) {
-								case 'Movie':
-								itemType = 'video';
-								break;
-								case 'Zip':
-								itemType = 'html';
-								break;
-								default:
-								itemType = itemType.toLowerCase();
-							}*/
 							regions[regions.length-1].mediaInfo.push({ "source" : item.Source, "duration": item.DurationSeconds, "type" : item.AssetType.toLowerCase()});
 						}
 					}
@@ -363,64 +383,18 @@ app.get('/', function (req, res) {
 						});
 					}
 					debugLog(DATA_DEBUG, 'Configured new jsonData: ' + JSON.stringify(jsonData));
-					/*switch (regions[x].mediaPath.slice(regions[x].mediaPath.lastIndexOf('.'))) {
-						case '.zip':
-						debugLog('Zip stuff: ' + regions[x].mediaPath);
-						if (fs.existsSync('c:/Urchannel/incoming' + regions[x].mediaPath.replace(/\..{0,4}$/i,''))) {
-							debugLog('Deleting current unzipped folder');
-							rmdirRecursively('c:/Urchannel/incoming' + regions[x].mediaPath.replace(/\..{0,4}$/i,''));
-							debugLog('Complete');
-						}
-						//htmlOut = htmlOut + divStart + '<iframe scrolling="no" src="/incoming' + regions[x].mediaPath.replace(/\..{0,4}$/i, '') + '/index.html' +'" style="border:none;" width="100%" height="100%"></iframe></div>\n';
-						htmlOut = htmlOut + '<li class>' + JSON.stringify(jsonData) + '</li>'
-						unzip('c:/Urchannel/incoming' + regions[x].mediaPath, 'c:/Urchannel/incoming/Media/', {
-							map: file => {
-								file.path = file.path.replace(/\.html$/i,'.ejs');
-								return file;
-							}
-						}).then(res => {
-							var indexPath = '';
-							if (res.path) {
-								indexPath = res.path;
-							} else if (res[0]) {
-								indexPath = res[0].path;
-							}
-							completeRegions.SetValue(completeRegions.GetValue()+1);
-							debugLog('Added iframe for zip file: ' + indexPath.replace(/\/.*?$/i, '/') + 'index.html');
-						}).catch(err => {
-							debugLog('Error in unzip process: ' + err.stack);
-						});
-						break;
-						case '.html':
-						htmlOut = htmlOut + divStart + '<iframe scrolling="no" src="/incoming' + regions[x].mediaPath +'" style="border:none;" width="100%" height="100%"></iframe></div>\n';
-						completeRegions.SetValue(completeRegions.GetValue()+1);
-						break;
-						case '.png':
-						htmlOut = htmlOut + '<img src="/incoming' + regions[x].mediaPath +'" style="' + positioningStuff + '"' +'></img>\n';
-						completeRegions.SetValue(completeRegions.GetValue()+1);
-						break;
-						case '.mp4':
-						htmlOut = htmlOut + '<video style="' + positioningStuff + '" autoplay loop><source src="/incoming' + regions[x].mediaPath +'" type="video/mp4"></video>\n';
-						completeRegions.SetValue(completeRegions.GetValue()+1);
-					}*/
 					htmlOut = htmlOut + '<li class>' + JSON.stringify(jsonData) + '</li>\n';
 				}
 				htmlOut = htmlOut + '</div>\n';
 				htmlOut = htmlOut + '<script>var ' + regions[x].name + ' = new RegionPlayer("' + regions[x].name + '");</script>\n';
 				completeRegions.SetValue(completeRegions.GetValue()+1);
 			}
-			/*if (completeRegions == regions.length) {
-				res.render('index', {htmlOut: htmlOut});
-			} else {
-				debugLog('Reached render early.');
-			}*/
 		});
 });
 
 });
 // Get this party started
-//app.listen(3000, function () {
-	server.on('request', app);
-	server.listen(3000, function() {
-		debugLog(BASIC_DEBUG, 'Starting http server:  *:3000');
-	})
+server.on('request', app);
+server.listen(3000, function() {
+	debugLog(BASIC_DEBUG, 'Starting http server:  *:3000');
+});
