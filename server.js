@@ -186,9 +186,11 @@ function getHourOffset() {
 	if (tzOffset > 5) {
 		debugLog(TIME_DEBUG, "Returning " + (tzOffset - 5));
 		return tzOffset - 5;
-	} else {
+	} else if (tzOffset < 5) {
 		debugLog(TIME_DEBUG, "Returning " + (tzOffset + 5));
 		return tzOffset + 5;
+	} else {
+		return 0;
 	}
 }
 
