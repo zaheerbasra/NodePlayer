@@ -185,10 +185,10 @@ function getHourOffset() {
 	debugLog(TIME_DEBUG, "Timezone Offset: " + tzOffset);
 	if (tzOffset > 5) {
 		debugLog(TIME_DEBUG, "Returning " + (tzOffset - 5));
-		return tzOffset - 5;
+		return (tzOffset - 5);
 	} else if (tzOffset < 5) {
 		debugLog(TIME_DEBUG, "Returning " + (tzOffset + 5));
-		return tzOffset + 5;
+		return (tzOffset + 5);
 	} else {
 		return 0;
 	}
@@ -298,7 +298,7 @@ app.get('/', function (req, res) {
 					debugLog(DATA_DEBUG, playlist.Name);
 					debugLog(DATA_DEBUG, 'date string:'+playlist.StartTime.slice(6,-2));
 					var today = new Date();
-					today = adjustHours(today);
+					//today = adjustHours(today);
 					var regionStartDate = new Date(parseInt(playlist.StartTime.slice(6,-2)));
 					regionStartDate = adjustHours(regionStartDate);
 					var regionEndDate = new Date(parseInt(playlist.EndTime.slice(6,-2)));
