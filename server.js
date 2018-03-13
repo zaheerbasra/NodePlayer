@@ -13,7 +13,7 @@ const ZIP_DEBUG = 128;		// Messages related to unzipping files
 const PRICE_DEBUG = 256;	// Anything pricing related
 const TIME_DEBUG = 512;		// Related to adjusting timezones for modifying the date/time to match EST
 
-var debug = BASIC_DEBUG | WEBSOCK_DEBUG | DATA_DEBUG;
+var debug = BASIC_DEBUG | TIME_DEBUG | DATA_DEBUG;
 
 function debugLog(flag, msg) {
 	if (debug & flag || flag & ERROR_DEBUG || debug & ALL_DEBUG) {
@@ -33,6 +33,7 @@ var unzip = require('decompress');
 app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
 
+var timezoneOffset
 
 /*
 Directory watching and remote restarting
@@ -160,8 +161,8 @@ function checkDate(check1, check2) {
 	if (check1.getHours() + getHourOffset() > check2.getHours() + getHourOffset()) {  // If the hours are greater, you know it comes after
 		return 1;
 	} else if (check1.getHours() < check2.getHours()) { // Likewise if they're less, then you know it comes before
-		return -1;
-	} else {
+	return -1;
+} else {
 		if (check1.getMinutes() > check2.getMinutes()) { // Same with minutes
 			return 1;
 		} else if (check1.getMinutes() < check2.getMinutes()) {
@@ -181,7 +182,12 @@ function checkDate(check1, check2) {
 // Returns the hourly offset based on the timezone, the difference we need to add to make a time correct for our system
 // Remember, getTimezoneOffset() returns minutes, not actual hours.
 function getHourOffset() {
-	var tzOffset =  new Date().getTimezoneOffset() / 60;
+	var today = new Date();
+	var tzOffset =  today.getTimezoneOffset() / 60;
+	if (today.isDstObserved()) {
+		debugLog(TIME_DEBUG, "DST in effect.  tzOffset + 1");
+		tzOffset += 1;
+	}
 	debugLog(TIME_DEBUG, "Timezone Offset: " + tzOffset);
 	if (tzOffset > 5) {
 		debugLog(TIME_DEBUG, "Returning " + (tzOffset - 5));
@@ -205,6 +211,17 @@ function adjustHours(inDate) {
 // Returns the absolute seconds difference between two dates, ignoring days
 function timeDiff(date1, date2) {
 	return Math.abs(((date1.getHours() * 60*60) + (date1.getMinutes() * 60) + date1.getSeconds()) - ((date2.getHours() * 60*60) + (date2.getMinutes() * 60) + date2.getSeconds()));
+}
+
+// Internet copy pasta for determining DST
+Date.prototype.stdTimezoneOffset = function () {
+	var jan = new Date(this.getFullYear(), 0, 1);
+	var jul = new Date(this.getFullYear(), 6, 1);
+	return Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
+}
+
+Date.prototype.isDstObserved = function () {
+	return this.getTimezoneOffset() < this.stdTimezoneOffset();
 }
 
 // Content retrieval:  https://127.0.0.1/incoming/Media/<file name> returns the requested file, be it HTML or other.
@@ -310,27 +327,27 @@ app.get('/', function (req, res) {
 					if ((playlist.RecurrenceRule == null && today > regionStartDate && today < regionEndDate) ||
 						(playlist.RecurrenceRule != null && today > showStartDate && today < showEndDate && checkDate(today, regionStartDate) >= 0 && checkDate(today, regionEndDate) <= 0)) {
 						/*debugLog('File name = ' + playlist.Items[0].Source);
-						debugLog('mediaName = ' + playlist.Items[0].Name.replace(/[\&\s]/g,'').replace(/\..{0,4}$/i, ''));*/
-						if (playlist.RecurrenceRule != null) {
-							if (countdownTime < 0) {
-								countdownTime = (timeDiff(today, regionEndDate) + 1) * 1000;
-							} else {
-								var newTime = (timeDiff(today, regionEndDate) + 1) * 1000;
-								countdownTime = (countdownTime > newTime ? newTime : countdownTime);
-							}
-							debugLog(BASIC_DEBUG, 'RecurrenceRule not null, setting countdownTime to ' + countdownTime);
+					debugLog('mediaName = ' + playlist.Items[0].Name.replace(/[\&\s]/g,'').replace(/\..{0,4}$/i, ''));*/
+					if (playlist.RecurrenceRule != null) {
+						if (countdownTime < 0) {
+							countdownTime = (timeDiff(today, regionEndDate) + 1) * 1000;
+						} else {
+							var newTime = (timeDiff(today, regionEndDate) + 1) * 1000;
+							countdownTime = (countdownTime > newTime ? newTime : countdownTime);
 						}
-						if (region.Width == 1279)
-							region.Width = 1280;
-						regions.push({
-							"x": (region.CanvasLeft / 1280) * 100,
-							"y": (region.CanvasTop / 720) * 100,
-							"w": (region.Width / 1280) * 100,
-							"h": (region.Height /720) * 100,
-							"name": region.Name,
-							"mediaName": playlist.Name.replace(/[\&\s]/g,''),
-							"mediaInfo": []
-						});
+						debugLog(BASIC_DEBUG, 'RecurrenceRule not null, setting countdownTime to ' + countdownTime);
+					}
+					if (region.Width == 1279)
+						region.Width = 1280;
+					regions.push({
+						"x": (region.CanvasLeft / 1280) * 100,
+						"y": (region.CanvasTop / 720) * 100,
+						"w": (region.Width / 1280) * 100,
+						"h": (region.Height /720) * 100,
+						"name": region.Name,
+						"mediaName": playlist.Name.replace(/[\&\s]/g,''),
+						"mediaInfo": []
+					});
 						// Push a bunch of items onto the stack for this region for future playback
 						for (var item of playlist.Items) {
 							regions[regions.length-1].mediaInfo.push({ "source" : item.Source, "duration": item.DurationSeconds, "type" : item.AssetType.toLowerCase()});
