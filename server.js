@@ -12,8 +12,9 @@ const WEBSOCK_DEBUG = 64;	// Triggers when messages are sent or received via web
 const ZIP_DEBUG = 128;		// Messages related to unzipping files
 const PRICE_DEBUG = 256;	// Anything pricing related
 const TIME_DEBUG = 512;		// Related to adjusting timezones for modifying the date/time to match EST
+const EXEC_DEBUG = 1024;	// Debugs related to starting programs
 
-var debug = BASIC_DEBUG | TIME_DEBUG | DATA_DEBUG;
+var debug = BASIC_DEBUG | EXEC_DEBUG | DATA_DEBUG;
 
 function debugLog(flag, msg) {
 	if (debug & flag || flag & ERROR_DEBUG || debug & ALL_DEBUG) {
@@ -69,11 +70,20 @@ if (fs.existsSync('/btv/incoming/PriceFiles/price.xml')) {
 		wss.broadcast('reload');
 	});
 }
-watch.watchTree(__dirname, function (f, curr, prev) {
-	debugLog(WEBSOCK_DEBUG, 'Found change in NodePlayer, triggering reload');
-	wss.broadcast('reload');
-});
 
+/*
+Execution setup
+Allows execution of outside programs.  Specifically we want to run Chrome at the moment in kiosk mode, but it could also run other programs like our entire suite of upkeep programs
+*/
+
+var path = require("path");
+var exec = require("child_process").exec;
+var pathToChrome = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe';
+var chromex86 = true;
+if (!fs.existsSync(pathToChrome)) {
+	debugLog(EXEC_DEBUG, 'Unable to find ' + pathToChrome);
+	chromex86 = false;
+}
 
 /*
 Watcher setup for fs.existsSync checking
@@ -83,7 +93,6 @@ function timedFSCheck(callback) {
 	debugLog(FOCUS_DEBUG, 'Retrying render');
 	callback();
 }
-
 
 /*
 Implementation
@@ -416,4 +425,25 @@ app.get('/', function (req, res) {
 server.on('request', app);
 server.listen(3000, function() {
 	debugLog(BASIC_DEBUG, 'Starting http server:  *:3000');
+	debugLog(BASIC_DEBUG, 'Attempting to launch Chrome');
+	if (chromex86) {
+		exec('"C:/Program Files (x86)/Google/Chrome/Application/chrome.exe" --kiosk --app-auto-launched 127.0.0.1:3000', (err, stdout, stderr) => {
+			if (err) {
+				debugLog(ERROR_DEBUG, 'Error in exec(): ' + err);
+				return;
+			}
+			debugLog(EXEC_DEBUG, 'stdout: ' +stdout);
+			debugLog(EXEC_DEBUG, 'stderr: ' +stderr);
+		});
+	} else {
+		exec('"C:/Program Files/Google/Chrome/Application/chrome.exe" --kiosk --app-auto-launched 127.0.0.1:3000', (err, stdout, stderr) => {
+			if (err) {
+				debugLog(ERROR_DEBUG, 'Error in exec(): ' + err);
+				return;
+			}
+			debugLog(EXEC_DEBUG, 'stdout: ' +stdout);
+			debugLog(EXEC_DEBUG, 'stderr: ' +stderr);
+		});
+
+	}
 });
