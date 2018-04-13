@@ -16,6 +16,8 @@ const EXEC_DEBUG = 1024;	// Debugs related to starting programs
 
 var debug = BASIC_DEBUG | EXEC_DEBUG | DATA_DEBUG;
 
+
+
 function debugLog(flag, msg) {
 	if (debug & flag || flag & ERROR_DEBUG || debug & ALL_DEBUG) {
 		console.log(msg);
@@ -29,11 +31,12 @@ var express = require('express');
 var app = express();
 var fs = require('fs'), parseString = require('xml2js').parseString;
 var ejs = require('ejs');
+var http = require('http')
 var server = require('http').createServer();
 var unzip = require('decompress');
 app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
-
+var triggerContentTimeOut = 10000;
 var timezoneOffset
 
 /*
@@ -221,6 +224,83 @@ function adjustHours(inDate) {
 function timeDiff(date1, date2) {
 	return Math.abs(((date1.getHours() * 60*60) + (date1.getMinutes() * 60) + date1.getSeconds()) - ((date2.getHours() * 60*60) + (date2.getMinutes() * 60) + date2.getSeconds()));
 }
+
+
+//copy the $file to $dir2
+var copyFile = (file, dir2)=>{
+	//include the fs, path modules
+	var fs = require('fs');
+	var path = require('path');
+  
+	//gets file name and adds it to dir2
+	var f = path.basename(file);
+	var source = fs.createReadStream(file);
+	var dest = fs.createWriteStream(path.resolve(dir2, f));
+  
+	source.pipe(dest);
+	source.on('end', function() { console.log('Succesfully copied'); });
+	source.on('error', function(err) { console.log(err); });
+};
+
+function processMediaItem(mediaItem) {
+	copyFile(mediaItem.Path, rootpath + "../incoming/Media/");
+	switch(mediaItem.AssetType) {
+		case "Image":
+			// ToD0: please impliment what we want to do with the images
+			//console.log(mediaItem);
+			break;
+		default: // I asume default will be the videos
+		//copyFile(mediaItem.Path, rootpath + '../incoming/Media/');
+	}
+}
+
+function getTriggerdContents() {
+	
+	var options = {
+		hostname: "lorcos.ur-channel.com",
+		port: 80,
+		path: "/TriggerApp/TriggeredContentService/DEMOLEFTA0",
+		method: "GET"
+	};
+
+	var req = http.request(options, function(res) {
+		
+		var responseBody = "";
+		//console.log(`Server Status: ${res.statusCode}`);
+		//console.log("Response Headers: %j", res.headers);
+
+		res.setEncoding("UTF-8");
+
+		res.on("data", function(chunk){ 
+			responseBody += chunk;
+		});
+
+		res.on("end", function(chunk){ 
+			//console.log(responseBody);
+			responseBody = '{"MediaItems":[{"AssetType":"Image","Duration":300,"Height":2160,"Left":0,"Path":"C:\URChannel\incoming\Trigger\COBS_Bread_Cape_Baguette_Final_Feb15.mp4","Top":0,"Width":1920,"Zindex":0},{"AssetType":"Image","Duration":300,"Height":2160,"Left":1920,"Path":"C:\URChannel\incoming\Trigger\MetalWorks\COBS_Bread_Danish_Final_Feb15.mp4","Top":0,"Width":1920,"Zindex":0}],"SignalKey":"FUSMETVWA0"}';
+			var obj = JSON.parse(responseBody);
+
+			//console.log(obj.MediaItems);
+
+			for(var i = 0; i < obj.MediaItems.length; i++) {
+				var mediaItem = obj.MediaItems[i];
+				processMediaItem(mediaItem);
+			}
+
+		});
+	});
+
+	req.on("error", function(err){ 
+		console.log(`Problem with the request: ${err.message}`);
+	});
+
+	req.end();
+
+}
+
+// this will keep triggering the get contents every 10 second
+setInterval(getTriggerdContents, triggerContentTimeOut);
+
 
 // Internet copy pasta for determining DST
 Date.prototype.stdTimezoneOffset = function () {
