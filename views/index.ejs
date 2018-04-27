@@ -90,11 +90,30 @@
 	</script>
 	<script>
 		const ws = new WebSocket('ws://127.0.0.1:3000');
+		const triggercontent = "triggercontent:";
+
+const payload= `{
+
+"MediaItems":[{
+	  "AssetType":"Movie",
+	  "Duration":30,
+	  "Height":1080,
+	  "Left":0,
+	  "Path":"C:\\URChannel\\incoming\\Media\\COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
+	  "Top":0,
+	  "Width":1920,
+	  "Zindex":0
+}],
+"SignalKey":"DEMOLEFTA0"
+}`;
+
 
 		ws.onmessage = function (event) {
 			console.log('event.data: ' + event.data);
 			if (event.data === 'reload') {
 				location.reload();
+			} else if (event.data.startsWith(triggercontent)) {
+					console.log(event.data.slice(triggercontent.length));
 			}
 		};
 	</script>

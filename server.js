@@ -13,10 +13,9 @@ const ZIP_DEBUG = 128;		// Messages related to unzipping files
 const PRICE_DEBUG = 256;	// Anything pricing related
 const TIME_DEBUG = 512;		// Related to adjusting timezones for modifying the date/time to match EST
 const EXEC_DEBUG = 1024;	// Debugs related to starting programs
+const TRIGGER_DEBUG = 2048;	// Debugs related to trigger contents
 
-var debug = BASIC_DEBUG | EXEC_DEBUG | DATA_DEBUG;
-
-
+var debug = BASIC_DEBUG | TRIGGER_DEBUG | DATA_DEBUG;
 
 function debugLog(flag, msg) {
 	if (debug & flag || flag & ERROR_DEBUG || debug & ALL_DEBUG) {
@@ -226,48 +225,22 @@ function timeDiff(date1, date2) {
 }
 
 
-//copy the $file to $dir2
-var copyFile = (file, dir2)=>{
-	//include the fs, path modules
-	var fs = require('fs');
-	var path = require('path');
-  
-	//gets file name and adds it to dir2
-	var f = path.basename(file);
-	var source = fs.createReadStream(file);
-	var dest = fs.createWriteStream(path.resolve(dir2, f));
-  
-	source.pipe(dest);
-	source.on('end', function() { console.log('Succesfully copied'); });
-	source.on('error', function(err) { console.log(err); });
-};
-
-function processMediaItem(mediaItem) {
-	copyFile(mediaItem.Path, rootpath + "../incoming/Media/");
-	switch(mediaItem.AssetType) {
-		case "Image":
-			// ToD0: please impliment what we want to do with the images
-			//console.log(mediaItem);
-			break;
-		default: // I asume default will be the videos
-		//copyFile(mediaItem.Path, rootpath + '../incoming/Media/');
-	}
-}
-
 function getTriggerdContents() {
-	
+	var playerId = process.env.hostname;
+	debugLog(TRIGGER_DEBUG, playerId);
 	var options = {
 		hostname: "lorcos.ur-channel.com",
 		port: 80,
-		path: "/TriggerApp/TriggeredContentService/DEMOLEFTA0",
+		path: "/TriggerApp/TriggeredContentService/" + playerId,
 		method: "GET"
 	};
 
 	var req = http.request(options, function(res) {
 		
 		var responseBody = "";
-		//console.log(`Server Status: ${res.statusCode}`);
-		//console.log("Response Headers: %j", res.headers);
+
+		debugLog(TRIGGER_DEBUG,`Server Status: ${res.statusCode}`);
+		debugLog(TRIGGER_DEBUG,"Response Headers: %j", res.headers);
 
 		res.setEncoding("UTF-8");
 
@@ -276,15 +249,16 @@ function getTriggerdContents() {
 		});
 
 		res.on("end", function(chunk){ 
-			//console.log(responseBody);
-			responseBody = '{"MediaItems":[{"AssetType":"Image","Duration":300,"Height":2160,"Left":0,"Path":"C:\URChannel\incoming\Trigger\COBS_Bread_Cape_Baguette_Final_Feb15.mp4","Top":0,"Width":1920,"Zindex":0},{"AssetType":"Image","Duration":300,"Height":2160,"Left":1920,"Path":"C:\URChannel\incoming\Trigger\MetalWorks\COBS_Bread_Danish_Final_Feb15.mp4","Top":0,"Width":1920,"Zindex":0}],"SignalKey":"FUSMETVWA0"}';
+			
+			debugLog(TRIGGER_DEBUG,responseBody);
+			
 			var obj = JSON.parse(responseBody);
 
-			//console.log(obj.MediaItems);
+			debugLog(TRIGGER_DEBUG,obj.MediaItems);
 
-			for(var i = 0; i < obj.MediaItems.length; i++) {
-				var mediaItem = obj.MediaItems[i];
-				processMediaItem(mediaItem);
+			if(obj.MediaItems.length > 0)
+			{
+				wss.broadcast('triggercontent:' + responseBody);
 			}
 
 		});
