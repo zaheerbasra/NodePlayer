@@ -39,7 +39,7 @@
 			var currentItem = listItems.length-1;
 
 			function playContent( index ) {
-				console.log('Started playContent for '+currentRegion+' index '+index);
+				//console.log('Started playContent for '+currentRegion+' index '+index);
 				listItems[index].classList.add( 'current' );
 				var jsonItem = JSON.parse(listItems[index].innerHTML);
 				switch (jsonItem.type.toLowerCase()) {
@@ -86,34 +86,49 @@
 				window.setTimeout(playContent, 500, nextItem);
 			} 
 			window.setTimeout(nextContentEvent, 1000);
+
+		
+
 		}
+
+
+
 	</script>
 	<script>
 		const ws = new WebSocket('ws://127.0.0.1:3000');
 		const triggercontent = "triggercontent:";
 
-const payload= `{
+		function PlayTriggerContent(regionName, mediaItem) {
+			var currentRegion = regionName;
+			var regionDiv = document.getElementById( currentRegion );
+			var playlist = document.getElementById( currentRegion + '-playlist' );
+			var listItems = playlist.children;
 
-"MediaItems":[{
-	  "AssetType":"Movie",
-	  "Duration":30,
-	  "Height":1080,
-	  "Left":0,
-	  "Path":"C:\\URChannel\\incoming\\Media\\COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
-	  "Top":0,
-	  "Width":1920,
-	  "Zindex":0
-}],
-"SignalKey":"DEMOLEFTA0"
-}`;
+			switch (mediaItem.AssetType.toLowerCase()) {
+					case 'video':
+					case 'movie':
+					regionDiv.innerHTML = '<video id="' + currentRegion + '-video" width="100%" height="100%" autoplay><source src="/incoming/Media/' + mediaItem.Path + '" type="video/mp4"></video>';
+					break;
+					default:
+					regionDiv.innerHTML = 'Unrecognised content type: ' + mediaItem.type + ':' + mediaItem.source;
+					}
 
+			document.getElementById(currentRegion + '-video').addEventListener( 'ended', function() {
+				console.log(currentRegion);
+				RegionPlayer(currentRegion);
+			});
+		}
 
 		ws.onmessage = function (event) {
-			console.log('event.data: ' + event.data);
+			//console.log('event.data: ' + event.data);
 			if (event.data === 'reload') {
 				location.reload();
 			} else if (event.data.startsWith(triggercontent)) {
-					console.log(event.data.slice(triggercontent.length));
+					var payload = event.data.slice(triggercontent.length);
+					//console.log(event.data.slice(triggercontent.length));
+					var mediaItem = JSON.parse(payload).MediaItems[0];
+					//console.log(mediaItem);
+					PlayTriggerContent("Region1", mediaItem);
 			}
 		};
 	</script>

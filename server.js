@@ -35,7 +35,7 @@ var server = require('http').createServer();
 var unzip = require('decompress');
 app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
-var triggerContentTimeOut = 10000;
+var triggerContentTimeOut = 50000;
 var timezoneOffset
 
 /*
@@ -240,7 +240,7 @@ function getTriggerdContents() {
 		var responseBody = "";
 
 		debugLog(TRIGGER_DEBUG,`Server Status: ${res.statusCode}`);
-		debugLog(TRIGGER_DEBUG,"Response Headers: %j", res.headers);
+		//debugLog(TRIGGER_DEBUG,"Response Headers: %j", res.headers);
 
 		res.setEncoding("UTF-8");
 
@@ -250,15 +250,36 @@ function getTriggerdContents() {
 
 		res.on("end", function(chunk){ 
 			
-			debugLog(TRIGGER_DEBUG,responseBody);
-			
-			var obj = JSON.parse(responseBody);
-
-			debugLog(TRIGGER_DEBUG,obj.MediaItems);
-
-			if(obj.MediaItems.length > 0)
+			if(responseBody.length < 1)
 			{
-				wss.broadcast('triggercontent:' + responseBody);
+				responseBody = `{
+					"MediaItems":[{
+						"AssetType":"Movie",
+						"Duration":30,
+						"Height":1080,
+						"Left":0,
+	"Path":"COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
+						"Top":0,
+						"Width":1920,
+						"Zindex":0
+					}],
+					"SignalKey":"DEMOLEFTA0"
+					}`
+			}
+
+
+			if(responseBody.length > 1)
+			{
+				//debugLog(TRIGGER_DEBUG,responseBody);
+				
+				var obj = JSON.parse(responseBody);
+
+				//debugLog(TRIGGER_DEBUG,obj.MediaItems);
+
+				if(obj.MediaItems.length > 0)
+				{
+					wss.broadcast('triggercontent:' + responseBody);
+				}
 			}
 
 		});
