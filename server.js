@@ -36,7 +36,7 @@ var unzip = require('decompress');
 app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
 var os = require('os');
-var triggerContentTimeOut = 50000;
+var triggerContentTimeOut = 10000;
 var timezoneOffset
 
 /*
@@ -225,10 +225,32 @@ function timeDiff(date1, date2) {
 	return Math.abs(((date1.getHours() * 60*60) + (date1.getMinutes() * 60) + date1.getSeconds()) - ((date2.getHours() * 60*60) + (date2.getMinutes() * 60) + date2.getSeconds()));
 }
 
-
+/**
+ * In order to test this trigger content process, please post the following JSON to below url
+http://lorcos.ur-channel.com/TriggerApp/TriggeredContentService/PostSignal
+POST
+content-type:  application/json
+{
+    "MediaItems": [{
+        "AssetType": "Movie",
+        "Path": "COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
+        "Duration": 30,
+        "Height": 1080,
+        "Width": 1920,
+        "Left": 0,
+        "Top": 0
+    }],
+    "SignalKey": "DEMORIGHTA0"
+}
+ * 
+ */
 function getTriggerdContents() {
 	var playerId = os.hostname();
-	if (playerId == 'CA-MSS-DEV05') {playerId = 'DEMORIGHTA0';}
+	if ([ 'CA-MSS-DEV05', 'DESKTOP-1JQ9LQV'].includes(playerId)) 
+	{
+		playerId = 'DEMORIGHTA0';
+	}
+
 	var options = {
 		hostname: "lorcos.ur-channel.com",
 		port: 80,
@@ -241,8 +263,8 @@ function getTriggerdContents() {
 		
 		var responseBody = "";
 
-		debugLog(TRIGGER_DEBUG,`Server Status: ${res.statusCode}`);
-		debugLog(TRIGGER_DEBUG,"Response Headers: %j", res.headers);
+		//debugLog(TRIGGER_DEBUG,`Server Status: ${res.statusCode}`);
+		//debugLog(TRIGGER_DEBUG,"Response Headers: %j", res.headers);
 
 		res.setEncoding("UTF-8");
 
@@ -251,33 +273,12 @@ function getTriggerdContents() {
 		});
 
 		res.on("end", function(chunk){ 
-			
-/*			if(responseBody.length < 1)
-			{
-				responseBody = `{
-					"MediaItems":[{
-						"AssetType":"Movie",
-						"Duration":30,
-						"Height":1080,
-						"Left":0,
-						"Path":"COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
-						"Top":0,
-						"Width":1920,
-						"Zindex":0
-					}],
-					"SignalKey":"DEMORIGHTA0"
-					}`
-			}*/
-
 
 			if(responseBody.length > 1)
 			{
-				debugLog(TRIGGER_DEBUG,responseBody);
-				
+				//debugLog(TRIGGER_DEBUG,responseBody);
 				var obj = JSON.parse(responseBody);
-
 				debugLog(TRIGGER_DEBUG,obj.MediaItems);
-
 				if(obj.MediaItems.length > 0)
 				{
 					wss.broadcast('triggercontent:' + responseBody);
