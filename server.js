@@ -35,6 +35,7 @@ var server = require('http').createServer();
 var unzip = require('decompress');
 app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
+var os = require('os');
 var triggerContentTimeOut = 50000;
 var timezoneOffset
 
@@ -75,7 +76,7 @@ if (fs.existsSync('/btv/incoming/PriceFiles/price.xml')) {
 
 /*
 Execution setup
-Allows execution of outside programs.  Specifically we want to run Chrome at the moment in kiosk mode, but it could also run other programs like our entire suite of upkeep programs
+Allows execution of outside programs.	Specifically we want to run Chrome at the moment in kiosk mode, but it could also run other programs like our entire suite of upkeep programs
 */
 
 var path = require("path");
@@ -156,9 +157,9 @@ function rmdirRecursively(path) {
 		fs.readdirSync(path).forEach(function(file, index){
 			var curPath = path + "/" + file;
 	  if (fs.lstatSync(curPath).isDirectory()) { // recurse
-	  	rmdirRecursively(curPath);
+		rmdirRecursively(curPath);
 	  } else { // delete file
-	  	fs.unlinkSync(curPath);
+		fs.unlinkSync(curPath);
 	  }
 	});
 		fs.rmdirSync(path);
@@ -226,8 +227,8 @@ function timeDiff(date1, date2) {
 
 
 function getTriggerdContents() {
-	var playerId = process.env.hostname;
-	debugLog(TRIGGER_DEBUG, playerId);
+	var playerId = os.hostname();
+	if (playerId == 'CA-MSS-DEV05') {playerId = 'DEMORIGHTA0';}
 	var options = {
 		hostname: "lorcos.ur-channel.com",
 		port: 80,
@@ -235,12 +236,13 @@ function getTriggerdContents() {
 		method: "GET"
 	};
 
+	debugLog(TRIGGER_DEBUG,'Calling with path: ' + options.path);
 	var req = http.request(options, function(res) {
 		
 		var responseBody = "";
 
 		debugLog(TRIGGER_DEBUG,`Server Status: ${res.statusCode}`);
-		//debugLog(TRIGGER_DEBUG,"Response Headers: %j", res.headers);
+		debugLog(TRIGGER_DEBUG,"Response Headers: %j", res.headers);
 
 		res.setEncoding("UTF-8");
 
@@ -250,7 +252,7 @@ function getTriggerdContents() {
 
 		res.on("end", function(chunk){ 
 			
-			if(responseBody.length < 1)
+/*			if(responseBody.length < 1)
 			{
 				responseBody = `{
 					"MediaItems":[{
@@ -258,30 +260,29 @@ function getTriggerdContents() {
 						"Duration":30,
 						"Height":1080,
 						"Left":0,
-	"Path":"COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
+						"Path":"COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
 						"Top":0,
 						"Width":1920,
 						"Zindex":0
 					}],
-					"SignalKey":"DEMOLEFTA0"
+					"SignalKey":"DEMORIGHTA0"
 					}`
-			}
+			}*/
 
 
 			if(responseBody.length > 1)
 			{
-				//debugLog(TRIGGER_DEBUG,responseBody);
+				debugLog(TRIGGER_DEBUG,responseBody);
 				
 				var obj = JSON.parse(responseBody);
 
-				//debugLog(TRIGGER_DEBUG,obj.MediaItems);
+				debugLog(TRIGGER_DEBUG,obj.MediaItems);
 
 				if(obj.MediaItems.length > 0)
 				{
 					wss.broadcast('triggercontent:' + responseBody);
 				}
 			}
-
 		});
 	});
 
