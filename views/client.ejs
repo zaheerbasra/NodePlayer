@@ -87,52 +87,30 @@
 			} 
 			window.setTimeout(nextContentEvent, 1000);
 
-		
-
 		}
-
-
 
 	</script>
 	<script>
 		const ws = new WebSocket('ws://192.168.0.10:3000');
-		const triggercontent = "triggercontent:";
+
 		const synchronizecontent = "synchronizecontent:";
 		
 
-		function PlayTriggerContent(regionName, mediaItem) {
+		function PlaySynchronizeContent(regionName, mediaItem) {
 			var currentRegion = regionName;
 			var regionDiv = document.getElementById( currentRegion );
-			var playlist = document.getElementById( currentRegion + '-playlist' );
-			var listItems = playlist.children;
-
-			switch (mediaItem.AssetType.toLowerCase()) {
-					case 'video':
-					case 'movie':
-					regionDiv.innerHTML = '<video id="' + currentRegion + '-video" width="100%" height="100%" autoplay muted><source src="/incoming/Media/' + mediaItem.Path + '" type="video/mp4"></video>';
-					break;
-					default:
-					regionDiv.innerHTML = 'Unrecognised content type: ' + mediaItem.type + ':' + mediaItem.source;
-					}
-
-			document.getElementById(currentRegion + '-video').addEventListener( 'ended', function() {
-				console.log(currentRegion);
-				RegionPlayer(currentRegion);
-			});
+			regionDiv.innerHTML = '<video id="' + currentRegion + '-video" width="100%" height="100%" autoplay muted><source src="/incoming/Media/' + mediaItem + '" type="video/mp4"></video>';
 		}
 
 		ws.onmessage = function (event) {
 			//console.log('event.data: ' + event.data);
 			if (event.data === 'reload') {
 				location.reload();
+			} else if (event.data.startsWith(synchronizecontent)) {
+					var mediaItem = event.data.slice(synchronizecontent.length);
+					console.log(mediaItem);
+					PlaySynchronizeContent("Region1", mediaItem);
 			} 
-			else if (event.data.startsWith(triggercontent)) {
-					var payload = event.data.slice(triggercontent.length);
-					//console.log(event.data.slice(triggercontent.length));
-					var mediaItem = JSON.parse(payload).MediaItems[0];
-					//console.log(mediaItem);
-					PlayTriggerContent("Region1", mediaItem);
-			}
 		};
 	</script>
 	<%- htmlOut %>
