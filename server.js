@@ -39,6 +39,9 @@ var os = require('os');
 var triggerContentTimeOut = 10000;
 var timezoneOffset
 
+var syncIsMaster = true;
+var syncClients = [ "127.0.0.15" ,"127.0.0.17" ];
+
 /*
 Directory watching and remote restarting
 */
