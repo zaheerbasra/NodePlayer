@@ -77,6 +77,7 @@
 				nextItem = currentItem + 1;
 				if ( nextItem >= listItems.length ) {
 					nextItem = 0;
+					PlayingPlaylistFromStart();
 				}
 				if (document.getElementById(currentRegion + '-video')) {
 					document.getElementById(currentRegion + '-video').removeEventListener('ended', nextContentEvent);
@@ -98,6 +99,7 @@
 		const ws = new WebSocket('ws://192.168.0.10:3000');
 		const triggercontent = "triggercontent:";
 		const synchronizecontent = "synchronizecontent:";
+		const playplaylistfromstart = "playplaylistfromstart";
 		
 
 		function PlayTriggerContent(regionName, mediaItem) {
@@ -134,6 +136,12 @@
 					PlayTriggerContent("Region1", mediaItem);
 			}
 		};
+
+		function PlayingPlaylistFromStart() {
+			ws.send(playplaylistfromstart);
+		}
+
+
 	</script>
 	<%- htmlOut %>
 </body> 

@@ -36,11 +36,21 @@ var unzip = require('decompress');
 app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
 var os = require('os');
-var triggerContentTimeOut = 10000;
-var timezoneOffset
 
+var triggerContentTimeOut = 10000;
+
+/* 
+This flag will control if this player is the 
+syncrinization one or the trigger content one
+*/
+var syncPlayer = true;
+// In case it is sync, we would require these two flags for master and just one or none for clients
 var syncIsMaster = true;
-var syncClients = [ "127.0.0.15" ,"127.0.0.17" ];
+var syncClients = [ "192.168.0.25" ];
+
+var syncMessage = "playplaylistfromstart";
+
+var timezoneOffset
 
 /*
 Directory watching and remote restarting
@@ -61,7 +71,18 @@ wss.broadcast = function broadcast(data) {
 wss.on('connection', function connection(ws) {
 	debugLog(BASIC_DEBUG, 'Client connected');
 	ws.on('message', function incoming(data) {
-		debugLog(WEBSOCK_DEBUG, 'Received message: ' + data);
+		if(syncIsMaster && syncMessage == data)
+		{
+			debugLog(TRIGGER_DEBUG, 'Received message: ' + data);
+			for(var i = 0; i < syncClients.length; i++) {
+				var syncClient = syncClients[i];
+				debugLog(TRIGGER_DEBUG, 'Client: ' + syncClient);
+				const ws = new WebSocket.Server({ port : 3000, host : syncClient });
+				ws.on('open', function open() {
+					ws.send(syncMessage);
+				});
+			}
+		}
 	});
 	ws.on('close', function () {debugLog(BASIC_DEBUG, 'Client disconnected');});
 	ws.send('connected');
@@ -298,9 +319,11 @@ function getTriggerdContents() {
 
 }
 
+if(!syncPlayer)
+{
 // this will keep triggering the get contents every 10 second
 setInterval(getTriggerdContents, triggerContentTimeOut);
-
+}
 
 // Internet copy pasta for determining DST
 Date.prototype.stdTimezoneOffset = function () {
