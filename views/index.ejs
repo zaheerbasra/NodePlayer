@@ -134,6 +134,8 @@
 					var mediaItem = JSON.parse(payload).MediaItems[0];
 					//console.log(mediaItem);
 					PlayTriggerContent("Region1", mediaItem);
+			} else if(event.data.startsWith(playplaylistfromstart)) {
+				RegionPlayer("Region1");
 			}
 		};
 

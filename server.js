@@ -46,7 +46,7 @@ syncrinization one or the trigger content one
 var syncPlayer = true;
 // In case it is sync, we would require these two flags for master and just one or none for clients
 var syncIsMaster = true;
-var syncClients = [ "192.168.0.25" ];
+var syncClients = [ "192.168.0.25:3000" ];
 
 var syncMessage = "playplaylistfromstart";
 
@@ -71,16 +71,27 @@ wss.broadcast = function broadcast(data) {
 wss.on('connection', function connection(ws) {
 	debugLog(BASIC_DEBUG, 'Client connected');
 	ws.on('message', function incoming(data) {
-		if(syncIsMaster && syncMessage == data)
+		if(syncMessage == data)
 		{
 			debugLog(TRIGGER_DEBUG, 'Received message: ' + data);
+			if(syncIsMaster)
+			{
+			
 			for(var i = 0; i < syncClients.length; i++) {
 				var syncClient = syncClients[i];
 				debugLog(TRIGGER_DEBUG, 'Client: ' + syncClient);
-				const ws = new WebSocket.Server({ port : 3000, host : syncClient });
-				ws.on('open', function open() {
-					ws.send(syncMessage);
-				});
+				try {
+					//const ws = new WebSocket.Server({ port : 3001, host : syncClient });
+					const ws = new WebSocket('ws://' + syncClient);
+					ws.on('open', function open() {
+						ws.send(syncMessage);
+					});	
+				} catch (error) {
+					debugLog(TRIGGER_DEBUG, 'Error: ' + error);
+				}
+			}
+			} else {
+				wss.broadcast(syncMessage);
 			}
 		}
 	});
