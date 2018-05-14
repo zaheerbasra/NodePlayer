@@ -529,6 +529,7 @@ app.get('/', function (req, res) {
 				}
 				htmlOut = htmlOut + '</div>\n';
 				htmlOut = htmlOut + '<script>var ' + regions[x].name + ' = new RegionPlayer("' + regions[x].name + '");</script>\n';
+				htmlOut = htmlOut + '<script>var syncIsMaster = ' + syncIsMaster + ';</script>\n';
 				completeRegions.SetValue(completeRegions.GetValue()+1);
 			}
 		});

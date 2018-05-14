@@ -140,7 +140,9 @@
 		};
 
 		function PlayingPlaylistFromStart() {
-			ws.send(playplaylistfromstart);
+			if(syncIsMaster) {
+				ws.send(playplaylistfromstart);
+			}
 		}
 
 
