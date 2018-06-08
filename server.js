@@ -6,7 +6,7 @@ const ALL_DEBUG = 1;
 const BASIC_DEBUG = 2;
 const DATA_DEBUG = 4;		// Deeper data messaging
 const FOCUS_DEBUG = 8;		// Focus on something new
-const ERROR_DEBUG = 16; 
+const ERROR_DEBUG = 16;
 const WATCHER_DEBUG = 32;	// Debug messages related to watching certain variable values, like counting up regions and loading them
 const WEBSOCK_DEBUG = 64;	// Triggers when messages are sent or received via websock
 const ZIP_DEBUG = 128;		// Messages related to unzipping files
@@ -14,8 +14,10 @@ const PRICE_DEBUG = 256;	// Anything pricing related
 const TIME_DEBUG = 512;		// Related to adjusting timezones for modifying the date/time to match EST
 const EXEC_DEBUG = 1024;	// Debugs related to starting programs
 const TRIGGER_DEBUG = 2048;	// Debugs related to trigger contents
+const CONFIG_DEBUG = 4096;		// Shows info for Config File loading
+const IPADDR_DEBUG = 8192;		// Brief output regarding IP addresses and network interfaces
 
-var debug = BASIC_DEBUG | TRIGGER_DEBUG | DATA_DEBUG;
+var debug = BASIC_DEBUG | TRIGGER_DEBUG | DATA_DEBUG | IPADDR_DEBUG;
 
 function debugLog(flag, msg) {
 	if (debug & flag || flag & ERROR_DEBUG || debug & ALL_DEBUG) {
@@ -39,13 +41,13 @@ var os = require('os');
 
 var triggerContentTimeOut = 10000;
 
-/* 
-This flag will control if this player is the 
+/*
+This flag will control if this player is the
 syncrinization one or the trigger content one
 */
-var syncPlayer = true;
+var syncPlayer = false;
 // In case it is sync, we would require these two flags for master and just one or none for clients
-var syncIsMaster = true;
+var syncIsMaster = false;
 var syncClients = [ "192.168.0.25:3000" ];
 
 var syncMessage = "playplaylistfromstart";
@@ -76,20 +78,19 @@ wss.on('connection', function connection(ws) {
 			debugLog(TRIGGER_DEBUG, 'Received message: ' + data);
 			if(syncIsMaster)
 			{
-			
-			for(var i = 0; i < syncClients.length; i++) {
-				var syncClient = syncClients[i];
-				debugLog(TRIGGER_DEBUG, 'Client: ' + syncClient);
-				try {
-					//const ws = new WebSocket.Server({ port : 3001, host : syncClient });
-					const ws = new WebSocket('ws://' + syncClient);
-					ws.on('open', function open() {
-						ws.send(syncMessage);
-					});	
-				} catch (error) {
-					debugLog(TRIGGER_DEBUG, 'Error: ' + error);
+				for(var i = 0; i < syncClients.length; i++) {
+					var syncClient = syncClients[i];
+					debugLog(TRIGGER_DEBUG, 'Client: ' + syncClient);
+					try {
+						//const ws = new WebSocket.Server({ port : 3001, host : syncClient });
+						const ws = new WebSocket('ws://' + syncClient);
+						ws.on('open', function open() {
+							ws.send(syncMessage);
+						});
+					} catch (error) {
+						debugLog(TRIGGER_DEBUG, 'Error: ' + error);
+					}
 				}
-			}
 			} else {
 				wss.broadcast(syncMessage);
 			}
@@ -186,17 +187,77 @@ function getPriceFile() {
 	return priceFile;
 }
 
+
+// Get config file, based on new necessary fields for triggering as per work with Zaheer/Steven
+var globalConfig = {};
+function getConfigFile() {
+	var files = fs.readdirSync('.');
+	for (var x = 0, len = files.length; x < len; x++) {
+		if (files[x].startsWith('NodePlayer') && files[x].endsWith('.config')) {
+			var configFile = fs.readFileSync(files[x],'utf-8', function (err) {
+				if (err) debugLog(ERROR_DEBUG, err);
+			});
+			parseString(configFile, function(err, result) {
+				if (err) { debugLog(ERROR_DEBUG, err); }
+				var configRaw = result.configuration.appSettings[0].add;
+				/*result.configuration.appSettings.add.forEach(obj => {
+					globalConfig[obj.key] = obj.value;
+				});//*/
+				console.dir(configRaw[0]);
+				for (var line in Object.keys(configRaw)) {
+					debugLog(CONFIG_DEBUG, "new line["+configRaw[line]["$"].key+"]:"+configRaw[line]["$"].value);
+					globalConfig[configRaw[line]["$"].key] = configRaw[line]["$"].value;
+				}
+				debugLog(CONFIG_DEBUG, "globalConfig:" + JSON.stringify(globalConfig, null, 3));
+			});
+		}
+	}
+	globalConfig["IPAddress"] = getIPAddress();
+}
+
+
+// Get server's IP address
+function getIPAddress() {
+	const os = require('os');
+	var interfaces = os.networkInterfaces();
+	var returnIPs = {};
+
+	debugLog(IPADDR_DEBUG, "Diving into interfaces:" + Object.keys(interfaces).length);
+	Object.keys(interfaces).forEach(interfaceName => {
+		var alias = 0;
+		debugLog(IPADDR_DEBUG, "Investigating interface:"+interfaceName);
+		interfaces[interfaceName].forEach(interfaceEntry => {
+			if ('IPv4' != interfaceEntry.family || interfaceEntry.internal !== false) {
+				return;
+			}
+			debugLog(IPADDR_DEBUG, "-Data["+interfaceEntry.family+"]:"+interfaceEntry.address);
+			returnIPs[interfaceName+alias] = interfaceEntry.address;
+			++alias;
+		});
+	});
+	if (Object.keys(returnIPs).length > 1) {
+		for (let key of returnIPs.keys()) {
+			if (key == 'eth0') {
+				return returnIPs[key];
+			}
+		}
+	} else {
+		return returnIPs[Object.keys(returnIPs)[0]];
+	}
+}
+
+
 // Removes a directory, recursively.  Used to clear old extracted zip files for HTML content.
 function rmdirRecursively(path) {
 	if (fs.existsSync(path)) {
 		fs.readdirSync(path).forEach(function(file, index){
 			var curPath = path + "/" + file;
-	  if (fs.lstatSync(curPath).isDirectory()) { // recurse
-		rmdirRecursively(curPath);
-	  } else { // delete file
-		fs.unlinkSync(curPath);
-	  }
-	});
+			if (fs.lstatSync(curPath).isDirectory()) { // recurse
+				rmdirRecursively(curPath);
+			} else { // delete file
+				fs.unlinkSync(curPath);
+			}
+		});
 		fs.rmdirSync(path);
 	}
 };
@@ -208,8 +269,8 @@ function checkDate(check1, check2) {
 	if (check1.getHours() + getHourOffset() > check2.getHours() + getHourOffset()) {  // If the hours are greater, you know it comes after
 		return 1;
 	} else if (check1.getHours() < check2.getHours()) { // Likewise if they're less, then you know it comes before
-	return -1;
-} else {
+		return -1;
+	} else {
 		if (check1.getMinutes() > check2.getMinutes()) { // Same with minutes
 			return 1;
 		} else if (check1.getMinutes() < check2.getMinutes()) {
@@ -264,38 +325,44 @@ function timeDiff(date1, date2) {
  * In order to test this trigger content process, please post the following JSON to below url
 http://lorcos.ur-channel.com/TriggerApp/TriggeredContentService/PostSignal
 POST
-content-type:  application/json
+content-type:	application/json
 {
-    "MediaItems": [{
-        "AssetType": "Movie",
-        "Path": "COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
-        "Duration": 30,
-        "Height": 1080,
-        "Width": 1920,
-        "Left": 0,
-        "Top": 0
-    }],
-    "SignalKey": "DEMORIGHTA0"
+	 "MediaItems": [{
+		  "AssetType": "Movie",
+		  "Path": "COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
+		  "Duration": 30,
+		  "Height": 1080,
+		  "Width": 1920,
+		  "Left": 0,
+		  "Top": 0
+	 }],
+	 "SignalKey": "DEMORIGHTA0"
 }
- * 
+ *
  */
 function getTriggerdContents() {
 	var playerId = os.hostname();
-	if ([ 'CA-MSS-DEV05', 'DESKTOP-1JQ9LQV'].includes(playerId)) 
+	if ([ 'CA-MSS-DEV05', 'DESKTOP-1JQ9LQV'].includes(playerId))
 	{
 		playerId = 'DEMORIGHTA0';
 	}
 
-	var options = {
+	/*var options = {
 		hostname: "lorcos.ur-channel.com",
 		port: 80,
 		path: "/TriggerApp/TriggeredContentService/" + playerId,
 		method: "GET"
-	};
+	};*/
 
-	debugLog(TRIGGER_DEBUG,'Calling with path: ' + options.path);
+	var options = {
+		method: "GET",
+		port: 80,
+		hostname: globalConfig.triggerGetHost,
+		path: globalConfig.triggerGetPath + playerId
+	}
+	debugLog(TRIGGER_DEBUG,'Calling with path: ' + options.hostname + options.path);
 	var req = http.request(options, function(res) {
-		
+
 		var responseBody = "";
 
 		//debugLog(TRIGGER_DEBUG,`Server Status: ${res.statusCode}`);
@@ -303,27 +370,30 @@ function getTriggerdContents() {
 
 		res.setEncoding("UTF-8");
 
-		res.on("data", function(chunk){ 
+		res.on("data", function(chunk){
 			responseBody += chunk;
 		});
 
-		res.on("end", function(chunk){ 
+		res.on("end", function(chunk){
 
-			if(responseBody.length > 1)
-			{
-				//debugLog(TRIGGER_DEBUG,responseBody);
+			if(responseBody.length > 1) {
+				debugLog(TRIGGER_DEBUG,responseBody);
 				var obj = JSON.parse(responseBody);
+				for (var media of obj.MediaItems) {
+					console.dir(media);
+					media.Path = media.Path.replace(/\\/g, "/");
+					media.Path = media.Path.replace(new RegExp('C:/URChannel/', 'i'), "");
+				}
 				debugLog(TRIGGER_DEBUG,obj.MediaItems);
-				if(obj.MediaItems.length > 0)
-				{
-					wss.broadcast('triggercontent:' + responseBody);
+				if(obj.MediaItems.length > 0) {
+					wss.broadcast('triggercontent:' + JSON.stringify(obj));
 				}
 			}
 		});
 	});
 
-	req.on("error", function(err){ 
-		console.log(`Problem with the request: ${err.message}`);
+	req.on("error", function(err){
+		console.log('Problem with the request: ${err.message}');
 	});
 
 	req.end();
@@ -332,8 +402,8 @@ function getTriggerdContents() {
 
 if(!syncPlayer)
 {
-// this will keep triggering the get contents every 10 second
-setInterval(getTriggerdContents, triggerContentTimeOut);
+	// this will keep triggering the get contents every 10 second
+	setInterval(getTriggerdContents, triggerContentTimeOut);
 }
 
 // Internet copy pasta for determining DST
@@ -350,52 +420,52 @@ Date.prototype.isDstObserved = function () {
 // Content retrieval:  https://127.0.0.1/incoming/Media/<file name> returns the requested file, be it HTML or other.
 // TODO:  Spits out an error if the file doesn't exist, should look into catching that at some point.
 // Note:  Zip file downloads are not supported, as we should never be sending zips to the browser.  Just their contents.
-app.all('/incoming/Media/:path*', function (req, res, next) {
+app.all('/incoming/:path*', function (req, res, next) {
 	switch (req.params[0].slice(req.params[0].lastIndexOf('.'))) {
 		case '.zip':
-		res.send('File request: /incoming/Media/' + req.params.path + req.params[0]);
-		break;
+			res.send('File request: /incoming/' + req.params.path + req.params[0]);
+			break;
 		case '.html':
-		debugLog(DATA_DEBUG, "Got HTML request: " + rootpath + "../incoming/Media/" + req.params.path + req.params[0]);
-		debugLog(DATA_DEBUG, "Renaming index.html to ejs");
-		var htmlToEjs = req.params.path + req.params[0].replace(/\..{0,4}$/i, '.ejs');
-		fs.rename(rootpath + '../incoming/Media/' + req.params.path + req.params[0], rootpath + '../incoming/Media/'+htmlToEjs, function(err) {
-			if (err) {
-				if (err.code !== 'ENOENT') {
-					throw err;
+			debugLog(DATA_DEBUG, "Got HTML request: " + rootpath + "../incoming/" + req.params.path + req.params[0]);
+			debugLog(DATA_DEBUG, "Renaming index.html to ejs");
+			var htmlToEjs = req.params.path + req.params[0].replace(/\..{0,4}$/i, '.ejs');
+			fs.rename(rootpath + '../incoming/' + req.params.path + req.params[0], rootpath + '../incoming/'+htmlToEjs, function(err) {
+				if (err) {
+					if (err.code !== 'ENOENT') {
+						throw err;
+					}
 				}
-			}
-		});
-		if (fs.existsSync(rootpath + '../incoming/Media/' + htmlToEjs)) {
-			res.render(rootpath + '../incoming/Media/'+ htmlToEjs, getPriceFile());
-		} else {
-			debugLog(FOCUS_DEBUG, 'Unzip running slow, adding timer to retry render');
-			var contentTimer = setInterval(function () {
-				if (fs.existsSync(rootpath + '../incoming/Media/' + htmlToEjs)) {
-					res.render(rootpath + '../incoming/Media/'+ htmlToEjs, getPriceFile());
-					clearInterval(contentTimer);
-				}
-			}, 1000);
-		}
-
-		break;
-		default:
-		var options = {
-			root: rootpath + '../incoming/Media/',
-			headers: {
-				'x-timestamp': Date.now(),
-				'x-sent': true
-			}
-		};
-		res.sendFile(req.params.path + req.params[0], options, function (err) {
-			if (err) {
-				if (err.code !== 'ECONNABORTED') {
-					next(err);
-				}
+			});
+			if (fs.existsSync(rootpath + '../incoming/' + htmlToEjs)) {
+				res.render(rootpath + '../incoming/'+ htmlToEjs, getPriceFile());
 			} else {
-				debugLog(DATA_DEBUG, 'Served file: ' + req.params.path + req.params[0]);
+				debugLog(FOCUS_DEBUG, 'Unzip running slow, adding timer to retry render');
+				var contentTimer = setInterval(function () {
+					if (fs.existsSync(rootpath + '../incoming/' + htmlToEjs)) {
+						res.render(rootpath + '../incoming/'+ htmlToEjs, getPriceFile());
+						clearInterval(contentTimer);
+					}
+				}, 1000);
 			}
-		});
+
+			break;
+		default:
+			var options = {
+				root: rootpath + '../incoming/',
+				headers: {
+					'x-timestamp': Date.now(),
+					'x-sent': true
+				}
+			};
+			res.sendFile(req.params.path + req.params[0], options, function (err) {
+				if (err) {
+					if (err.code !== 'ECONNABORTED') {
+						next(err);
+					}
+				} else {
+					debugLog(DATA_DEBUG, 'Served file: ' + req.params.path + req.params[0]);
+				}
+			});
 	}
 });
 
@@ -410,13 +480,19 @@ app.get('/', function (req, res) {
 	// Find all the signal files, the _show[r0c0] one will be the one we want to load
 	fs.readdir(rootpath + '../SignalFiles', function(err, files) {
 		debugLog(DATA_DEBUG, 'Files: ' + files);
+		var foundShow = false;
 		for (var x = 0; x < files.length; x++ ) {
 			if (files[x].search(/_show\[r0c0\]/) >= 0) {
 				showFileName = files[x].replace("_show\[r0c0\].sgf", ".show");
 				debugLog(BASIC_DEBUG, "Found signal file: " + files[x] + " - Renaming to " + showFileName);
+				foundShow = true;
 				break;
 			}
 		}
+		if (!foundShow) {
+			debugLog("No show found!"); // TODO:  Make it fail gracefully
+		}
+
 
 		// Load the specified show file, extracting the item info from the first (and hopefully only!) region that has a date range including today
 		fs.readFile(rootpath + '../incoming/ShowFiles/' + showFileName, 'utf-8', function (err, data) {
@@ -451,26 +527,26 @@ app.get('/', function (req, res) {
 						(playlist.RecurrenceRule != null && today > showStartDate && today < showEndDate && checkDate(today, regionStartDate) >= 0 && checkDate(today, regionEndDate) <= 0)) {
 						/*debugLog('File name = ' + playlist.Items[0].Source);
 					debugLog('mediaName = ' + playlist.Items[0].Name.replace(/[\&\s]/g,'').replace(/\..{0,4}$/i, ''));*/
-					if (playlist.RecurrenceRule != null) {
-						if (countdownTime < 0) {
-							countdownTime = (timeDiff(today, regionEndDate) + 1) * 1000;
-						} else {
-							var newTime = (timeDiff(today, regionEndDate) + 1) * 1000;
-							countdownTime = (countdownTime > newTime ? newTime : countdownTime);
+						if (playlist.RecurrenceRule != null) {
+							if (countdownTime < 0) {
+								countdownTime = (timeDiff(today, regionEndDate) + 1) * 1000;
+							} else {
+								var newTime = (timeDiff(today, regionEndDate) + 1) * 1000;
+								countdownTime = (countdownTime > newTime ? newTime : countdownTime);
+							}
+							debugLog(BASIC_DEBUG, 'RecurrenceRule not null, setting countdownTime to ' + countdownTime);
 						}
-						debugLog(BASIC_DEBUG, 'RecurrenceRule not null, setting countdownTime to ' + countdownTime);
-					}
-					if (region.Width == 1279)
+						if (region.Width == 1279)
 						region.Width = 1280;
-					regions.push({
-						"x": (region.CanvasLeft / 1280) * 100,
-						"y": (region.CanvasTop / 720) * 100,
-						"w": (region.Width / 1280) * 100,
-						"h": (region.Height /720) * 100,
-						"name": region.Name,
-						"mediaName": playlist.Name.replace(/[\&\s]/g,''),
-						"mediaInfo": []
-					});
+						regions.push({
+							"x": (region.CanvasLeft / 1280) * 100,
+							"y": (region.CanvasTop / 720) * 100,
+							"w": (region.Width / 1280) * 100,
+							"h": (region.Height /720) * 100,
+							"name": region.Name,
+							"mediaName": playlist.Name.replace(/[\&\s]/g,''),
+							"mediaInfo": []
+						});
 						// Push a bunch of items onto the stack for this region for future playback
 						for (var item of playlist.Items) {
 							regions[regions.length-1].mediaInfo.push({ "source" : item.Source, "duration": item.DurationSeconds, "type" : item.AssetType.toLowerCase()});
@@ -487,10 +563,14 @@ app.get('/', function (req, res) {
 					wss.broadcast('reload');
 				}, countdownTime);
 			}
-			var completeRegions = new Watcher(0, function(val) {return val >= itemCount;}, function() {res.render('index', {htmlOut: htmlOut});});
+			// Set up a Watcher to eventually render the page.  Passes in variables:  htmlOut (the eventual completed page contents) and IPAddr (the IP address of the server)
+			var completeRegions = new Watcher(0, function(val) {return val >= itemCount;}, function() {
+				htmlOut = htmlOut + '<script>var syncIsMaster = ' + syncIsMaster + ';</script>\n';
+				res.render('index', {htmlOut: htmlOut, IPAddr: globalConfig['IPAddress']});
+			});
 			var renames = [];
 
-			// Start building up HTML tags for the region <div> tags and the playlist <li> tags.
+			// Start building up HTML tags for the region <div> tags and the playlist <li> tags
 			// Also extract any zip files (clearing out old data) for future use
 			for (var x = 0; x < regions.length; x++) {
 				debugLog(BASIC_DEBUG, "region["+x+"]: " + regions[x].x + "," + regions[x].y + " - " + regions[x].w + "," + regions[x].h + " - name: " + regions[x].name);
@@ -528,18 +608,20 @@ app.get('/', function (req, res) {
 					htmlOut = htmlOut + '<li class>' + JSON.stringify(jsonData) + '</li>\n';
 				}
 				htmlOut = htmlOut + '</div>\n';
-				htmlOut = htmlOut + '<script>var ' + regions[x].name + ' = new RegionPlayer("' + regions[x].name + '");</script>\n';
-				htmlOut = htmlOut + '<script>var syncIsMaster = ' + syncIsMaster + ';</script>\n';
+				htmlOut = htmlOut + '<script>players["' + regions[x].name + '"] = new RegionPlayer("' + regions[x].name + '");</script>\n';
+				htmlOut = htmlOut + '<script>window.setTimeout(' + regions[x].name + '.nextContentEvent, 1000);</script>\n';
 				completeRegions.SetValue(completeRegions.GetValue()+1);
 			}
 		});
-});
+	});
 
 });
 // Get this party started
 server.on('request', app);
 server.listen(3000, function() {
 	debugLog(BASIC_DEBUG, 'Starting http server:  *:3000');
+	debugLog(CONFIG_DEBUG, 'Loading config file');
+	getConfigFile();
 	debugLog(BASIC_DEBUG, 'Attempting to launch Chrome');
 	if (chromex86) {
 		exec('"C:/Program Files (x86)/Google/Chrome/Application/chrome.exe" --kiosk --app-auto-launched 127.0.0.1:3000', (err, stdout, stderr) => {
@@ -559,6 +641,5 @@ server.listen(3000, function() {
 			debugLog(EXEC_DEBUG, 'stdout: ' +stdout);
 			debugLog(EXEC_DEBUG, 'stderr: ' +stderr);
 		});
-
 	}
 });

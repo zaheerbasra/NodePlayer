@@ -1,5 +1,5 @@
-<!DOCTYPE html> 
-<html> 
+<!DOCTYPE html>
+<html>
 <head>
 	<style type="text/css">
 	video, object {
@@ -29,125 +29,207 @@
 	}
 </style>
 </head>
-<body class="ext-webkit ext-chrome"> 
+<body class="ext-webkit ext-chrome">
 	<script>
-		function RegionPlayer(regionName) {
-			var currentRegion = regionName;
-			var regionDiv = document.getElementById( currentRegion );
-			var playlist = document.getElementById( currentRegion + '-playlist' );
-			var listItems = playlist.children;
-			var currentItem = listItems.length-1;
+		var players = {};
+		class RegionPlayer {
+			constructor(regionName, isTemporary = false) {
+				this.tempRegion = isTemporary;
+				this.currentRegion = regionName;
+				console.log("currentRegion ("+this.currentRegion+") set up as " + (this.tempRegion ? "temporary" : "permanent") + " region...");
+				this.regionDiv = document.getElementById( this.currentRegion );
+				this.playlist = document.getElementById( this.currentRegion + '-playlist' );
+				this.listItems = this.playlist.children;
+				this.currentItem = this.listItems.length-1;
+				//window.setTimeout(nextContentEvent, 1000);
+				window.setTimeout((index) => { this.playContent(index) }, 1000, 0);
+			}
 
-			function playContent( index ) {
+			playContent( index ) {
 				//console.log('Started playContent for '+currentRegion+' index '+index);
-				listItems[index].classList.add( 'current' );
-				var jsonItem = JSON.parse(listItems[index].innerHTML);
+				this.listItems[index].classList.add( 'current' );
+				var jsonItem = JSON.parse(this.listItems[index].innerHTML);
 				switch (jsonItem.type.toLowerCase()) {
 					case 'image':
-					regionDiv.innerHTML = '<img src="' + jsonItem.source + '" width="100%" height="100%"></img>'
+					this.regionDiv.innerHTML = '<img src="' + jsonItem.source + '" width="100%" height="100%"></img>'
 					break;
 					case 'video':
 					case 'movie':
-					regionDiv.innerHTML = '<video id="' + currentRegion + '-video" width="100%" height="100%" autoplay muted  '+ (listItems.length == 1 ? ' loop':'') +'><source src="' + jsonItem.source + '" type="video/mp4"></video>';
+					this.regionDiv.innerHTML = '<video id="' + this.currentRegion + '-video" width="100%" height="100%" autoplay muted  '+ (this.listItems.length == 1 && !this.tempRegion ? ' loop':'') +'><source src="' + jsonItem.source + '" type="video/mp4"></video>';
 					break;
 					case 'html':
-					regionDiv.innerHTML = '<iframe scrolling="no" src="' + jsonItem.source +'" style="border:none;" width="100%" height="100%"></iframe>'
+					this.regionDiv.innerHTML = '<iframe scrolling="no" src="' + jsonItem.source +'" style="border:none;" width="100%" height="100%"></iframe>'
 					break;
 					default:
-					regionDiv.innerHTML = 'Unrecognised content type: ' + jsonItem.type + ':' + jsonItem.source;
+					this.regionDiv.innerHTML = 'Unrecognised content type: ' + jsonItem.type + ':' + jsonItem.source;
 				}
-				if (listItems.length > 1) {
-					if (jsonItem.duration > 0) {
-						window.setTimeout(nextContentEvent, jsonItem.duration * 1000);
+
+				if (jsonItem.duration > 0 && !(jsonItem.type .toUpperCase()!== 'VIDEO' || jsonItem.type.toUpperCase() !== 'MOVIE')) {
+					if (this.tempRegion) {
+						window.setTimeout(() => { this.removeRegion(); }, jsonItem.duration * 1000);
 					} else {
-						if (jsonItem.type === 'video' || jsonItem.type === 'movie') {
-							document.getElementById(currentRegion + '-video').addEventListener( 'ended', nextContentEvent);
+						window.setTimeout(() => { this.nextContentEvent(); }, jsonItem.duration * 1000);
+					}
+				} else {
+					if (jsonItem.type.toUpperCase() === 'VIDEO' || jsonItem.type.toUpperCase() === 'MOVIE') {
+						if (this.tempRegion) {
+							document.getElementById(this.currentRegion + '-video').addEventListener( 'ended', () => { this.removeRegion(); });
 						} else {
-							window.setTimeout(nextContentEvent, 10000);
+							document.getElementById(this.currentRegion + '-video').addEventListener( 'ended', () => { this.nextContentEvent(); });
+						}
+					} else {
+						if (this.tempRegion) {
+							window.setTimeout(() => { this.removeRegion(); }, 10000);
+						} else {
+							window.setTimeout(() => { this.nextContentEvent(); }, 10000);
 						}
 					}
-					currentItem = index;
 				}
-				regionDiv.classList.remove('hide');
-				regionDiv.classList.add('show');
+				this.currentItem = index;
+
+				this.regionDiv.classList.remove('hide');
+				this.regionDiv.classList.add('show');
 			}
 
-			function nextContentEvent() {
-				listItems[currentItem].classList.remove( 'current' );
-				nextItem = currentItem + 1;
-				if ( nextItem >= listItems.length ) {
+			nextContentEvent() {
+				this.listItems[this.currentItem].classList.remove( 'current' );
+				var nextItem = this.currentItem + 1;
+				if ( nextItem >= this.listItems.length ) {
 					nextItem = 0;
 					PlayingPlaylistFromStart();
 				}
-				if (document.getElementById(currentRegion + '-video')) {
-					document.getElementById(currentRegion + '-video').removeEventListener('ended', nextContentEvent);
+				if (document.getElementById(this.currentRegion + '-video')) {
+					document.getElementById(this.currentRegion + '-video').removeEventListener('ended', this.nextContentEvent);
 				}
-				regionDiv.classList.remove('show');
-				regionDiv.classList.add('hide');
-				window.setTimeout(playContent, 500, nextItem);
-			} 
-			window.setTimeout(nextContentEvent, 1000);
+				this.regionDiv.classList.remove('show');
+				this.regionDiv.classList.add('hide');
+				window.setTimeout((nextItem) => { this.playContent(nextItem); }, 500, nextItem);
+			}
 
-		
-
+			removeRegion() {
+				console.log("Removing temp region");
+				this.regionDiv.parentNode.removeChild(this.regionDiv);
+				this.playlist.parentNode.removeChild(this.playlist);
+				delete players['temp'];
+				console.log("Number of RegionPlayers remaining: " + Object.keys(players).length);
+				//for (var x = 0; x < Object.keys(players).length; x++) {
+				//	console.log("Advancing to next content in region "+players[x].this.currentRegion);
+				//	players[x].nextContentEvent();
+				//}
+				for (const [key, player] of Object.entries(players)) {
+					players[key].nextContentEvent();
+				}
+			}
 		}
 
-
-
-	</script>
-	<script>
-		const ws = new WebSocket('ws://192.168.0.10:3000');
+		const ws = new WebSocket('ws://<%- IPAddr %>:3000');
 		const triggercontent = "triggercontent:";
 		const synchronizecontent = "synchronizecontent:";
-		const playplaylistfromstart = "playplaylistfromstart";
-		
+		const restartPlaylist = "restartPlaylist";
+
+
+		function stopContent( regionName ) {
+			//var player = players[regionName];
+			//var currentRegion = regionName;
+			//var regionDiv = document.getElementById( currentRegion );
+			//var playlist = document.getElementById( currentRegion + '-playlist' );
+			//var listItems = playlist.children;
+
+			//var curr;
+
+			if (document.getElementById(regionName + '-video')) {
+				document.getElementById(regionName + '-video').pause();
+			}
+		}
+
+		function findCurrentItem(playlist) {
+			for (var x = 0; x < playlist.children.length; x++) {
+				if (playlist.children[x].className === "current") {
+					return x;
+				}
+			}
+		}
+
+		function newPlaylistItem(mediaItem) {
+			return document.createTextNode('{"source":"' + mediaItem.Path +'","type":"' + mediaItem.AssetType + '","Duration":' + mediaItem.Duration + '}');
+		}
 
 		function PlayTriggerContent(regionName, mediaItem) {
-			var currentRegion = regionName;
-			var regionDiv = document.getElementById( currentRegion );
-			var playlist = document.getElementById( currentRegion + '-playlist' );
-			var listItems = playlist.children;
+			var currentRegion = regionName + '-temp';
 
-			switch (mediaItem.AssetType.toLowerCase()) {
-					case 'video':
-					case 'movie':
-					regionDiv.innerHTML = '<video id="' + currentRegion + '-video" width="100%" height="100%" autoplay muted><source src="/incoming/Media/' + mediaItem.Path + '" type="video/mp4"></video>';
-					break;
-					default:
-					regionDiv.innerHTML = 'Unrecognised content type: ' + mediaItem.type + ':' + mediaItem.source;
-					}
+			if (mediaItem.Path.includes('Permanent')) {
+				var playlist = document.getElementById( regionName + '-playlist' );
+				var currentItem = findCurrentItem(playlist);
+				var newItem = currentItem + 1;
+				console.log('Permanent region: ' + regionName +":"+currentItem);
 
-			document.getElementById(currentRegion + '-video').addEventListener( 'ended', function() {
+				var newEntry = document.createElement("LI");
+				newEntry.classList.add('current');
+				var text = newPlaylistItem(mediaItem);
+				newEntry.appendChild(text);
+				playlist.insertBefore(newEntry, playlist.children[newItem]);
+				playlist.children[newItem].classList.remove('current');
+			} else if (mediaItem.Path.includes('Media')) {
+				stopContent( regionName );
 				console.log(currentRegion);
-				RegionPlayer(currentRegion);
-			});
+
+				var newRegionDiv = document.createElement("DIV");
+				newRegionDiv.id = currentRegion;
+				newRegionDiv.style.zIndex = Math.max(mediaItem.Zindex, 9999);
+				newRegionDiv.style.position = "absolute";
+				if (mediaItem.Width == 1280) {
+					mediaItem.Left = parseInt((mediaItem.Left / 1280) * 100);
+					mediaItem.Top = parseInt((mediaItem.Top / 720) * 100);
+					mediaItem.Width = parseInt((mediaItem.Width / 1280) * 100);
+					mediaItem.Height = parseInt((mediaItem.Height / 720) * 100);
+				} else if (mediaItem.Width == 1920) {
+					mediaItem.Left = parseInt((mediaItem.Left / 1920) * 100);
+					mediaItem.Top = parseInt((mediaItem.Top / 1080) * 100);
+					mediaItem.Width = parseInt((mediaItem.Width / 1920) * 100);
+					mediaItem.Height = parseInt((mediaItem.Height / 1080) * 100);
+				}
+				newRegionDiv.style.left = mediaItem.Left + '%';
+				newRegionDiv.style.top = mediaItem.Top + '%';
+				newRegionDiv.style.width = mediaItem.Width + '%';
+				newRegionDiv.style.height = mediaItem.Height + '%';
+				console.log('Created display region ['+currentRegion+']');
+				document.body.appendChild(newRegionDiv);
+
+				var newPlaylist = document.createElement("DIV");
+				newPlaylist.id = currentRegion + '-playlist';
+				newPlaylist.style.display = "none";
+				var newItem = document.createElement("LI");
+				var text = newPlaylistItem(mediaItem);
+				newItem.appendChild(text);
+				newPlaylist.appendChild(newItem);
+				console.log('Created playlist ['+currentRegion+'-playlist]');
+				document.body.appendChild(newPlaylist);
+
+				players['temp'] = new RegionPlayer(currentRegion, true);
+			}
 		}
 
 		ws.onmessage = function (event) {
 			//console.log('event.data: ' + event.data);
 			if (event.data === 'reload') {
 				location.reload();
-			} 
-			else if (event.data.startsWith(triggercontent)) {
-					var payload = event.data.slice(triggercontent.length);
-					//console.log(event.data.slice(triggercontent.length));
-					var mediaItem = JSON.parse(payload).MediaItems[0];
-					//console.log(mediaItem);
-					PlayTriggerContent("Region1", mediaItem);
-			} else if(event.data.startsWith(playplaylistfromstart)) {
+			} else if (event.data.startsWith(triggercontent)) {
+				var payload = event.data.slice(triggercontent.length);
+				console.log(payload);
+				var mediaItem = JSON.parse(payload).MediaItems[0];
+				console.log(mediaItem);
+				PlayTriggerContent("Region1", mediaItem);
+			} else if(event.data.startsWith(restartPlaylist)) {
 				RegionPlayer("Region1");
 			}
 		};
 
 		function PlayingPlaylistFromStart() {
 			if(syncIsMaster) {
-				ws.send(playplaylistfromstart);
+				ws.send(restartPlaylist);
 			}
 		}
-
-
 	</script>
 	<%- htmlOut %>
-</body> 
+</body>
 </html>
-

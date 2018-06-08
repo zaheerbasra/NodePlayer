@@ -1,6 +1,6 @@
 {
-  "name": "Node Player",
-  "version": "0.9.1",
+  "name": "nodeplayer",
+  "version": "0.9.6",
   "dependencies": {
     "cheerio": "^1.0.0-rc.2",
     "decompress": "^4.2.0",
