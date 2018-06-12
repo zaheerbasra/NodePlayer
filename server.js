@@ -88,7 +88,7 @@ wss.on('connection', function connection(ws) {
 							ws.send(syncMessage);
 						});
 					} catch (error) {
-						debugLog(TRIGGER_DEBUG, 'Error: ' + error);
+						debugLog(ERROR_DEBUG, 'Error: ' + error);
 					}
 				}
 			} else {
@@ -98,6 +98,11 @@ wss.on('connection', function connection(ws) {
 	});
 	ws.on('close', function () {debugLog(BASIC_DEBUG, 'Client disconnected');});
 	ws.send('connected');
+	ws.on('error', (err) => { 
+		if (err.code !== 'ECONNRESET') {
+			debugLog(BASIC_DEBUG, 'Error received - ' + err);
+		}
+	});
 });
 watch.watchTree('/Urchannel/SignalFiles', function (f, curr, prev) {
 	debugLog(WEBSOCK_DEBUG, 'Found change in signal files, triggering reload');
