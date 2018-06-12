@@ -39,7 +39,7 @@ app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
 var os = require('os');
 
-var triggerContentTimeOut = 10000;
+var triggerContentTimeOut = 5000;
 
 /*
 This flag will control if this player is the
