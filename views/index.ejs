@@ -175,7 +175,7 @@
 					stopContent(currentRegion);
 					var playlist = document.getElementById(currentRegion + '-playlist');
 					var newItem = newPlaylistItem(mediaItem);
-					playlist.replaceChild(newItem, playlist.childNodes[0]);
+					playlist.replaceChild( newItem, playlist.childNodes[0] );
 					players['temp'].playContent(0);
 				} else {
 					stopContent( regionName );
