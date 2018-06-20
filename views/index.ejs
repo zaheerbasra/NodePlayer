@@ -151,7 +151,10 @@
 		}
 
 		function newPlaylistItem(mediaItem) {
-			return document.createTextNode('{"source":"' + mediaItem.Path +'","type":"' + mediaItem.AssetType + '","Duration":' + mediaItem.Duration + '}');
+			var newEntry = document.createElement("LI");
+			newEntry.classList.add('current');
+			newEntry.appendChild(document.createTextNode('{"source":"' + mediaItem.Path +'","type":"' + mediaItem.AssetType + '","Duration":' + mediaItem.Duration + '}'));
+			return newEntry;
 		}
 
 		function PlayTriggerContent(regionName, mediaItem) {
@@ -163,49 +166,53 @@
 				var newItem = currentItem + 1;
 				console.log('Permanent region: ' + regionName +":"+currentItem);
 
-				var newEntry = document.createElement("LI");
-				newEntry.classList.add('current');
 				var text = newPlaylistItem(mediaItem);
 				newEntry.appendChild(text);
-				playlist.insertBefore(newEntry, playlist.children[newItem]);
+				playlist.insertBefore(newPlaylistItem(mediaItem), playlist.children[newItem]);
 				playlist.children[newItem].classList.remove('current');
 			} else if (mediaItem.Path.includes('Media')) {
-				stopContent( regionName );
-				console.log(currentRegion);
+				if ('temp' in players) {
+					stopContent(currentRegion);
+					var playlist = document.getElementById(currentRegion + '-playlist');
+					var newItem = newPlaylistItem(mediaItem);
+					playlist.replaceChild(newItem, playlist.childNodes[0]);
+					players['temp'].playContent(0);
+				} else {
+					stopContent( regionName );
+					console.log(currentRegion);
 
-				var newRegionDiv = document.createElement("DIV");
-				newRegionDiv.id = currentRegion;
-				newRegionDiv.style.zIndex = Math.max(mediaItem.Zindex, 9999);
-				newRegionDiv.style.position = "absolute";
-				if (mediaItem.Width == 1280) {
-					mediaItem.Left = parseInt((mediaItem.Left / 1280) * 100);
-					mediaItem.Top = parseInt((mediaItem.Top / 720) * 100);
-					mediaItem.Width = parseInt((mediaItem.Width / 1280) * 100);
-					mediaItem.Height = parseInt((mediaItem.Height / 720) * 100);
-				} else if (mediaItem.Width == 1920) {
-					mediaItem.Left = parseInt((mediaItem.Left / 1920) * 100);
-					mediaItem.Top = parseInt((mediaItem.Top / 1080) * 100);
-					mediaItem.Width = parseInt((mediaItem.Width / 1920) * 100);
-					mediaItem.Height = parseInt((mediaItem.Height / 1080) * 100);
+					var newRegionDiv = document.createElement("DIV");
+					newRegionDiv.id = currentRegion;
+					newRegionDiv.style.zIndex = Math.max(mediaItem.Zindex, 9999);
+					newRegionDiv.style.position = "absolute";
+					if (mediaItem.Width == 1280) {
+						mediaItem.Left = parseInt((mediaItem.Left / 1280) * 100);
+						mediaItem.Top = parseInt((mediaItem.Top / 720) * 100);
+						mediaItem.Width = parseInt((mediaItem.Width / 1280) * 100);
+						mediaItem.Height = parseInt((mediaItem.Height / 720) * 100);
+					} else if (mediaItem.Width == 1920) {
+						mediaItem.Left = parseInt((mediaItem.Left / 1920) * 100);
+						mediaItem.Top = parseInt((mediaItem.Top / 1080) * 100);
+						mediaItem.Width = parseInt((mediaItem.Width / 1920) * 100);
+						mediaItem.Height = parseInt((mediaItem.Height / 1080) * 100);
+					}
+					newRegionDiv.style.left = mediaItem.Left + '%';
+					newRegionDiv.style.top = mediaItem.Top + '%';
+					newRegionDiv.style.width = mediaItem.Width + '%';
+					newRegionDiv.style.height = mediaItem.Height + '%';
+					console.log('Created display region ['+currentRegion+']');
+					document.body.appendChild(newRegionDiv);
+
+					var newPlaylist = document.createElement("DIV");
+					newPlaylist.id = currentRegion + '-playlist';
+					newPlaylist.style.display = "none";
+	
+					newPlaylist.appendChild(newPlaylistItem(mediaItem));
+					console.log('Created playlist ['+currentRegion+'-playlist]');
+					document.body.appendChild(newPlaylist);
+
+					players['temp'] = new RegionPlayer(currentRegion, true);
 				}
-				newRegionDiv.style.left = mediaItem.Left + '%';
-				newRegionDiv.style.top = mediaItem.Top + '%';
-				newRegionDiv.style.width = mediaItem.Width + '%';
-				newRegionDiv.style.height = mediaItem.Height + '%';
-				console.log('Created display region ['+currentRegion+']');
-				document.body.appendChild(newRegionDiv);
-
-				var newPlaylist = document.createElement("DIV");
-				newPlaylist.id = currentRegion + '-playlist';
-				newPlaylist.style.display = "none";
-				var newItem = document.createElement("LI");
-				var text = newPlaylistItem(mediaItem);
-				newItem.appendChild(text);
-				newPlaylist.appendChild(newItem);
-				console.log('Created playlist ['+currentRegion+'-playlist]');
-				document.body.appendChild(newPlaylist);
-
-				players['temp'] = new RegionPlayer(currentRegion, true);
 			}
 		}
 

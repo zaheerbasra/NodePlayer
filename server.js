@@ -39,6 +39,8 @@ app.set('view engine', 'ejs');
 var rootpath = (process.platform === 'win32' ? __dirname.replace(/\\/g, '/').replace(/^C:/i, '') : __dirname) + '/';
 var os = require('os');
 
+var connectedPlayers = 0;
+
 var triggerContentTimeOut = 5000;
 
 /*
@@ -72,6 +74,7 @@ wss.broadcast = function broadcast(data) {
 };
 wss.on('connection', function connection(ws) {
 	debugLog(BASIC_DEBUG, 'Client connected');
+	connectedPlayers++;
 	ws.on('message', function incoming(data) {
 		if(syncMessage == data)
 		{
@@ -96,9 +99,14 @@ wss.on('connection', function connection(ws) {
 			}
 		}
 	});
-	ws.on('close', function () {debugLog(BASIC_DEBUG, 'Client disconnected');});
+	ws.on('close', function () {
+		connectedPlayers--;
+		if (connectedPlayers < 0)
+			connectedPlayers = 0;
+		debugLog(BASIC_DEBUG, 'Client disconnected');
+	});
 	ws.send('connected');
-	ws.on('error', (err) => { 
+	ws.on('error', (err) => {
 		if (err.code !== 'ECONNRESET') {
 			debugLog(BASIC_DEBUG, 'Error received - ' + err);
 		}
@@ -332,16 +340,16 @@ http://lorcos.ur-channel.com/TriggerApp/TriggeredContentService/PostSignal
 POST
 content-type:	application/json
 {
-	 "MediaItems": [{
-		  "AssetType": "Movie",
-		  "Path": "COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
-		  "Duration": 30,
-		  "Height": 1080,
-		  "Width": 1920,
-		  "Left": 0,
-		  "Top": 0
-	 }],
-	 "SignalKey": "DEMORIGHTA0"
+	"MediaItems": [{
+		"AssetType": "Movie",
+		"Path": "COBS_Bread_Cape_Baguette_Final_Feb15.mp4",
+		"Duration": 30,
+		"Height": 1080,
+		"Width": 1920,
+		"Left": 0,
+		"Top": 0
+	}],
+	"SignalKey": "DEMORIGHTA0"
 }
  *
  */
@@ -349,9 +357,10 @@ function getTriggerdContents() {
 	var playerId = os.hostname();
 	if ([ 'CA-MSS-DEV05', 'DESKTOP-1JQ9LQV'].includes(playerId))
 	{
-		playerId = 'DEMORIGHTA0';
+		playerId = 'TCC-COBSTESTA0';
 	}
 
+	if (connectedPlayers === 0) return;
 	/*var options = {
 		hostname: "lorcos.ur-channel.com",
 		port: 80,
